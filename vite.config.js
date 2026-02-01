@@ -8,5 +8,5 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
     outDir: 'docs'
   },
-  base: '/Turbo-Kart-Beta/'
+  base: './'
 })
