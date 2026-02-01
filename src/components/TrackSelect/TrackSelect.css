@@ -1,0 +1,414 @@
+.track-select {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    display: flex;
+    flex-direction: column;
+    color: white;
+}
+
+.select-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 2rem;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 2px solid rgba(243, 156, 18, 0.3);
+}
+
+.select-header h1 {
+    font-size: 2rem;
+    color: #f39c12;
+    margin: 0;
+}
+
+.back-button {
+    padding: 0.5rem 1rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 5px;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.back-button:hover {
+    background: rgba(243, 156, 18, 0.3);
+    border-color: #f39c12;
+}
+
+.header-spacer {
+    width: 80px;
+}
+
+.mode-badge {
+    padding: 0.5rem 1rem;
+    background: rgba(231, 76, 60, 0.3);
+    border: 1px solid #e74c3c;
+    border-radius: 5px;
+    color: #e74c3c;
+}
+
+.select-content {
+    flex: 1;
+    display: flex;
+    padding: 1.5rem;
+    gap: 2rem;
+    overflow: hidden;
+}
+
+/* Cup Carousel */
+.cup-carousel {
+    flex: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: center;
+    align-content: flex-start;
+    padding: 1rem;
+}
+
+.cup-card {
+    width: 140px;
+    height: 140px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid transparent;
+    border-radius: 15px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.cup-card:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: scale(1.05);
+}
+
+.cup-card.selected {
+    border-color: #f39c12;
+    background: rgba(243, 156, 18, 0.2);
+    box-shadow: 0 0 20px rgba(243, 156, 18, 0.3);
+}
+
+.cup-icon {
+    font-size: 3rem;
+}
+
+.cup-name {
+    font-size: 1rem;
+    text-align: center;
+}
+
+/* Cup Preview */
+.cup-preview {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 15px;
+    padding: 1.5rem;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.preview-title {
+    font-size: 1.5rem;
+    color: #f39c12;
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+.track-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.track-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+}
+
+.track-number {
+    width: 30px;
+    height: 30px;
+    background: rgba(243, 156, 18, 0.3);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    color: #f39c12;
+}
+
+.track-name {
+    flex: 1;
+    font-size: 1rem;
+}
+
+.track-theme {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: capitalize;
+}
+
+/* Track Grid */
+.track-grid-container {
+    flex: 2;
+    overflow-y: auto;
+    padding-right: 1rem;
+}
+
+.track-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+}
+
+.track-card {
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid transparent;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.track-card:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-2px);
+}
+
+.track-card.selected {
+    border-color: #f39c12;
+    background: rgba(243, 156, 18, 0.2);
+    box-shadow: 0 0 15px rgba(243, 156, 18, 0.3);
+}
+
+.track-preview-icon {
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, #3a7d3a, #2d5a27);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+}
+
+.track-preview-icon[data-theme="snow"],
+.track-preview-icon[data-theme="ice"] {
+    background: linear-gradient(135deg, #aabbdd, #667788);
+}
+
+.track-preview-icon[data-theme="desert"],
+.track-preview-icon[data-theme="canyon"] {
+    background: linear-gradient(135deg, #ddbb88, #aa7755);
+}
+
+.track-preview-icon[data-theme="volcano"] {
+    background: linear-gradient(135deg, #e74c3c, #332222);
+}
+
+.track-preview-icon[data-theme="space"] {
+    background: linear-gradient(135deg, #333355, #111133);
+}
+
+.track-preview-icon[data-theme="beach"],
+.track-preview-icon[data-theme="coastal"] {
+    background: linear-gradient(135deg, #3498db, #eeddaa);
+}
+
+.track-card-name {
+    font-size: 0.85rem;
+    text-align: center;
+    color: white;
+}
+
+/* Track Preview Panel */
+.track-preview-panel {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 15px;
+    padding: 1.5rem;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.track-info {
+    margin-bottom: 1.5rem;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.info-label {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.info-value {
+    color: #f39c12;
+    text-transform: capitalize;
+}
+
+.track-features h4 {
+    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.8);
+    margin-bottom: 0.5rem;
+}
+
+.track-features ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.track-features li {
+    padding: 0.3rem 0;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.9rem;
+}
+
+.track-features li::before {
+    content: '✓ ';
+    color: #2ecc71;
+}
+
+/* Battle Mode Select */
+.battle-mode-list {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.battle-mode-card {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid transparent;
+    border-radius: 15px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.battle-mode-card:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateX(10px);
+}
+
+.battle-mode-card.selected {
+    border-color: #e74c3c;
+    background: rgba(231, 76, 60, 0.2);
+    box-shadow: 0 0 20px rgba(231, 76, 60, 0.3);
+}
+
+.mode-icon {
+    font-size: 2.5rem;
+}
+
+.mode-info {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+}
+
+.mode-name {
+    font-size: 1.3rem;
+    font-weight: bold;
+    color: white;
+}
+
+.mode-description {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin-top: 0.25rem;
+}
+
+/* Arena Select */
+.arena-grid {
+    flex: 2;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    align-content: flex-start;
+}
+
+.arena-card {
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid transparent;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.arena-card:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: scale(1.05);
+}
+
+.arena-card.selected {
+    border-color: #e74c3c;
+    background: rgba(231, 76, 60, 0.2);
+    box-shadow: 0 0 15px rgba(231, 76, 60, 0.3);
+}
+
+.arena-icon {
+    font-size: 2.5rem;
+}
+
+.arena-name {
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+.arena-preview {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 15px;
+    padding: 1.5rem;
+    text-align: center;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.arena-preview h2 {
+    color: #e74c3c;
+    margin-bottom: 1rem;
+}
+
+.arena-theme {
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: capitalize;
+}
+
+.select-footer {
+    padding: 1rem;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.5);
+    background: rgba(0, 0, 0, 0.2);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
