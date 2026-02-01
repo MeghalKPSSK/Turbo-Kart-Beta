@@ -1,0 +1,608 @@
+.game-hud {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 100;
+    font-family: 'Arial', sans-serif;
+}
+
+/* Position Display */
+.hud-position {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    display: flex;
+    align-items: baseline;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 10px 20px;
+    border-radius: 10px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.position-number {
+    font-size: 3rem;
+    font-weight: bold;
+    color: #f39c12;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.position-suffix {
+    font-size: 1.5rem;
+    color: #f39c12;
+    margin-right: 5px;
+}
+
+.position-total {
+    font-size: 1.2rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+/* Lap Counter */
+.hud-lap {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 10px 25px;
+    border-radius: 10px;
+    border: 2px solid rgba(243, 156, 18, 0.5);
+}
+
+.lap-label {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin-right: 10px;
+}
+
+.lap-current {
+    font-size: 2rem;
+    font-weight: bold;
+    color: white;
+}
+
+.lap-divider {
+    font-size: 1.5rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.lap-total {
+    font-size: 1.5rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+/* Timer */
+.hud-time {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 10px 20px;
+    border-radius: 10px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.time-label {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.time-remaining-label {
+    color: #ffc107;
+}
+
+.time-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: white;
+    font-family: 'Courier New', monospace;
+}
+
+.time-value.time-critical {
+    color: #ff4444;
+    animation: time-flash 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes time-flash {
+    from { opacity: 1; }
+    to { opacity: 0.5; }
+}
+
+/* Best Lap (Time Trial) */
+.hud-best-lap {
+    position: absolute;
+    top: 90px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    background: rgba(76, 175, 80, 0.3);
+    padding: 8px 15px;
+    border-radius: 8px;
+    border: 2px solid rgba(76, 175, 80, 0.6);
+}
+
+.best-lap-label {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.best-lap-value {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #4caf50;
+    font-family: 'Courier New', monospace;
+}
+
+/* Speed */
+.hud-speed {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 15px 20px;
+    border-radius: 10px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    text-align: center;
+}
+
+.speed-value {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: white;
+    line-height: 1;
+}
+
+.speed-unit {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 10px;
+}
+
+.speed-bar {
+    width: 100px;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.speed-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #2ecc71, #f39c12, #e74c3c);
+    border-radius: 4px;
+    transition: width 0.1s;
+}
+
+/* Coins */
+.hud-coins {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 10px 20px;
+    border-radius: 10px;
+    border: 2px solid rgba(255, 215, 0, 0.5);
+}
+
+.coin-icon {
+    font-size: 1.5rem;
+}
+
+.coin-count {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #ffd700;
+}
+
+
+/* Nitro Booster */
+.hud-nitro {
+    position: absolute;
+    left: 20px;
+    top: 140px;
+    background: rgba(0, 0, 0, 0.6);
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    border-radius: 10px;
+    padding: 8px 12px;
+    color: #fff;
+    font-size: 0.8rem;
+    width: 140px;
+}
+
+.nitro-label {
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #7bed9f;
+    margin-bottom: 4px;
+}
+
+.nitro-bar {
+    width: 100%;
+    height: 10px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.nitro-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #2ecc71, #1abc9c);
+    box-shadow: 0 0 6px rgba(46, 204, 113, 0.7);
+}
+
+.nitro-hint {
+    margin-top: 4px;
+    font-size: 0.7rem;
+    opacity: 0.8;
+}
+
+/* Drift Indicator */
+.drift-indicator {
+    position: absolute;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 2rem;
+    animation: drift-bounce 0.2s ease-in-out infinite;
+}
+
+@keyframes drift-bounce {
+    0%, 100% { transform: translateX(-50%) scale(1); }
+    50% { transform: translateX(-50%) scale(1.1); }
+}
+
+.drift-blue { filter: hue-rotate(180deg); }
+.drift-orange { filter: hue-rotate(30deg); }
+.drift-purple { filter: hue-rotate(270deg); }
+
+/* Minimap */
+.hud-minimap {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 260px;
+    height: 200px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 10px;
+    overflow: hidden;
+    padding: 10px;
+}
+
+.minimap-track {
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+.minimap-svg {
+    width: 100%;
+    height: 100%;
+}
+
+.minimap-player {
+    fill: #e74c3c;
+    stroke: #ffffff;
+    stroke-width: 0.8;
+}
+
+.minimap-enemy {
+    fill: #3498db;
+    stroke: #ffffff;
+    stroke-width: 0.5;
+}
+
+.minimap-checkpoint {
+    fill: #f1c40f;
+    stroke: #000000;
+    stroke-width: 0.6;
+}
+
+/* Controls Hint */
+.hud-controls-hint {
+    position: absolute;
+    bottom: 150px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 20px;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.5);
+    background: rgba(0, 0, 0, 0.5);
+    padding: 5px 15px;
+    border-radius: 5px;
+}
+
+.hud-controls-hint span {
+    white-space: nowrap;
+}
+
+/* Countdown Overlay */
+.countdown-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 200;
+}
+
+.countdown-number {
+    font-size: 10rem;
+    font-weight: bold;
+    color: white;
+    text-shadow: 0 0 30px rgba(255, 255, 255, 0.5);
+    animation: countdown-pop 0.5s ease-out;
+}
+
+.countdown-number.go {
+    color: #2ecc71;
+    font-size: 8rem;
+}
+
+@keyframes countdown-pop {
+    0% { transform: scale(2); opacity: 0; }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+/* Race Results */
+.race-results {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, rgba(26, 26, 46, 0.95), rgba(15, 52, 96, 0.95));
+    z-index: 300;
+    color: white;
+    padding: 40px 20px;
+    box-sizing: border-box;
+    pointer-events: auto;
+}
+
+.results-title {
+    font-size: 2.5rem;
+    color: #f39c12;
+    margin-bottom: 1.5rem;
+    text-shadow: 0 0 20px rgba(243, 156, 18, 0.5);
+    flex-shrink: 0;
+}
+
+.results-list {
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 15px;
+    padding: 1rem;
+    min-width: 350px;
+    max-width: 500px;
+    max-height: 50vh;
+    overflow-y: auto;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 1;
+}
+
+.result-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.result-row:last-child {
+    border-bottom: none;
+}
+
+.result-row.player {
+    background: rgba(243, 156, 18, 0.2);
+    border-radius: 8px;
+}
+
+.result-position {
+    width: 30px;
+    height: 30px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+.result-row:nth-child(1) .result-position {
+    background: linear-gradient(135deg, #ffd700, #ffaa00);
+    color: #333;
+}
+
+.result-row:nth-child(2) .result-position {
+    background: linear-gradient(135deg, #c0c0c0, #a0a0a0);
+    color: #333;
+}
+
+.result-row:nth-child(3) .result-position {
+    background: linear-gradient(135deg, #cd7f32, #a66628);
+    color: #fff;
+}
+
+.result-emoji {
+    font-size: 1.5rem;
+    margin: 0 0.5rem;
+    min-width: 2rem;
+    text-align: center;
+}
+
+.result-name {
+    flex: 1;
+    font-size: 1.1rem;
+}
+
+.result-time {
+    font-family: 'Courier New', monospace;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.result-points {
+    color: #2ecc71;
+    font-weight: bold;
+}
+
+/* Results title variations */
+.results-title.victory {
+    color: #ffd700;
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.8),
+                 0 0 40px rgba(255, 215, 0, 0.5);
+    animation: victory-pulse 1s ease-in-out infinite;
+}
+
+.results-title.defeat {
+    color: #ff6b6b;
+    text-shadow: 0 0 15px rgba(255, 107, 107, 0.6);
+}
+
+.results-title.time-up {
+    color: #ff9800;
+    animation: time-up-flash 0.8s ease-in-out infinite;
+}
+
+@keyframes victory-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+@keyframes time-up-flash {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* Race results win/lose styling */
+.race-results.win {
+    border-color: #ffd700;
+    box-shadow: 0 0 30px rgba(255, 215, 0, 0.4);
+}
+
+.race-results.lose {
+    border-color: #ff6b6b;
+}
+
+/* Best lap result display */
+.best-lap-result {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    margin-bottom: 15px;
+    padding: 10px 20px;
+    background: rgba(76, 175, 80, 0.2);
+    border-radius: 10px;
+    border: 2px solid #4caf50;
+}
+
+.best-lap-result .best-lap-label {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 1rem;
+}
+
+.best-lap-result .best-lap-time {
+    color: #4caf50;
+    font-size: 1.5rem;
+    font-weight: bold;
+    font-family: 'Courier New', monospace;
+}
+
+/* VS Race result banner */
+.vs-result-banner {
+    margin-bottom: 15px;
+    padding: 10px 25px;
+    background: linear-gradient(135deg, rgba(33, 150, 243, 0.3), rgba(156, 39, 176, 0.3));
+    border-radius: 10px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.vs-position {
+    font-size: 1.3rem;
+    font-weight: bold;
+    color: white;
+}
+
+.continue-button {
+    margin-top: 1.5rem;
+    padding: 1rem 3rem;
+    background: linear-gradient(135deg, #f39c12, #e74c3c);
+    border: none;
+    border-radius: 10px;
+    color: white;
+    font-size: 1.2rem;
+    font-weight: bold;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.continue-button:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 20px rgba(243, 156, 18, 0.5);
+}
+
+/* Wrong Way Warning */
+.wrong-way-warning {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 30px 50px;
+    background: rgba(231, 76, 60, 0.9);
+    border: 4px solid #c0392b;
+    border-radius: 15px;
+    animation: wrong-way-flash 0.5s ease-in-out infinite;
+    z-index: 150;
+}
+
+.wrong-way-icon {
+    font-size: 3rem;
+}
+
+.wrong-way-text {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: white;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    letter-spacing: 2px;
+}
+
+@keyframes wrong-way-flash {
+    0%, 100% { 
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
+    50% { 
+        opacity: 0.7;
+        transform: translate(-50%, -50%) scale(1.05);
+    }
+}
