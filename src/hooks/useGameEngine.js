@@ -90,30 +90,30 @@ function createAIRacersHelper(game, renderer) {
     }
 }
 
-function checkItemBoxCollisionHelper(player, track) {
-    if (!track?.itemBoxes) return;
+// function checkItemBoxCollisionHelper(player, track) {
+//     if (!track?.itemBoxes) return;
     
-    track.itemBoxes.forEach(box => {
-        if (!box.active) return;
+//     track.itemBoxes.forEach(box => {
+//         if (!box.active) return;
         
-        const dist = player.vehicle.position.distanceTo(box.position);
-        if (dist < 3) {
-            // Get random item
-            const item = ITEMS.getRandomItem(player.vehicle.racePosition);
-            player.item = item;
-            box.active = false;
-            box.mesh.visible = false;
+//         const dist = player.vehicle.position.distanceTo(box.position);
+//         if (dist < 3) {
+//             // Get random item
+//             const item = ITEMS.getRandomItem(player.vehicle.racePosition);
+//             player.item = item;
+//             box.active = false;
+//             box.mesh.visible = false;
             
-            audioManager.playSound('item_get');
+//             audioManager.playSound('item_get');
             
-            // Respawn timer
-            setTimeout(() => {
-                box.active = true;
-                box.mesh.visible = true;
-            }, box.respawnTime * 1000);
-        }
-    });
-}
+//             // Respawn timer
+//             setTimeout(() => {
+//                 box.active = true;
+//                 box.mesh.visible = true;
+//             }, box.respawnTime * 1000);
+//         }
+//     });
+// }
 
 function checkCoinCollisionHelper(player, track) {
     if (!track?.coins) return;
@@ -180,45 +180,45 @@ function resolveVehicleCollisionsHelper(vehicles) {
     }
 }
 
-function applyItemEffect(player) {
-    if (!player || !player.item) return;
+// function applyItemEffect(player) {
+//     if (!player || !player.item) return;
     
-    const item = player.item;
-    console.log('Using item:', item.name || item.id);
+//     const item = player.item;
+//     console.log('Using item:', item.name || item.id);
     
-    // Apply item effect based on type
-    switch (item.type) {
-        case 'boost':
-            player.vehicle.applyBoost(item.boostPower || 1.5, item.boostDuration || 1.0);
-            audioManager.playSound('mushroom_boost');
-            break;
-        case 'trap':
-            audioManager.playSound('item_throw');
-            break;
-        case 'projectile':
-        case 'homing':
-            audioManager.playSound('shell_fire');
-            break;
-        case 'special':
-            player.vehicle.invincible = true;
-            player.vehicle.speedMultiplier = 1.3;
-            setTimeout(() => {
-                if (player.vehicle) {
-                    player.vehicle.invincible = false;
-                    player.vehicle.speedMultiplier = 1.0;
-                }
-            }, 8000);
-            audioManager.playSound('star_power');
-            break;
-        case 'explosive':
-            audioManager.playSound('bomb_throw');
-            break;
-        default:
-            audioManager.playSound('item_use');
-    }
+//     // Apply item effect based on type
+//     switch (item.type) {
+//         case 'boost':
+//             player.vehicle.applyBoost(item.boostPower || 1.5, item.boostDuration || 1.0);
+//             audioManager.playSound('mushroom_boost');
+//             break;
+//         case 'trap':
+//             audioManager.playSound('item_throw');
+//             break;
+//         case 'projectile':
+//         case 'homing':
+//             audioManager.playSound('shell_fire');
+//             break;
+//         case 'special':
+//             player.vehicle.invincible = true;
+//             player.vehicle.speedMultiplier = 1.3;
+//             setTimeout(() => {
+//                 if (player.vehicle) {
+//                     player.vehicle.invincible = false;
+//                     player.vehicle.speedMultiplier = 1.0;
+//                 }
+//             }, 8000);
+//             audioManager.playSound('star_power');
+//             break;
+//         case 'explosive':
+//             audioManager.playSound('bomb_throw');
+//             break;
+//         default:
+//             audioManager.playSound('item_use');
+//     }
     
-    player.item = null;
-}
+//     player.item = null;
+// }
 
 function calculatePositionsHelper(game, setRaceComplete, setFinalResults) {
     const allRacers = [...game.players, ...game.aiRacers];
@@ -412,7 +412,7 @@ function checkLapCompletionHelper(game, raceData, setRaceData, setHudData) {
             // Check if crossed finish line (checkpoint 0) with all checkpoints visited
             if (nextCheckpoint === 0 && racer.checkpointsVisited.size === checkpointCount) {
                 // Valid lap completion!
-                const previousLap = racer.lap;
+                // const previousLap = racer.lap;
                 racer.lap++;
                 racer.vehicle.lap = racer.lap;
                 racer.checkpointsVisited = new Set([0]); // Reset for next lap
