@@ -20,6 +20,7 @@ export class AIDriver {
         this.line = buildRacingLine(track);
         this.profile = buildSpeedProfile(track, this.line, {
             grip: spec.tires.grip,
+            latAccel: (speed) => vehicle.latAccelLimit(speed),
             gravity: spec.gravity,
             topSpeed: spec.engine.topSpeed,
             brakeDecel: (spec.engine.brakeForce / spec.mass) * 0.62,

@@ -48,6 +48,12 @@ export function buildVehicleSpec(vehicle, upgrades = {}, { gravity = DEFAULT_GRA
         z: mass * (width * width + 1) / 12 * (isBike ? 1.8 : 1.2)
     };
 
+    // The fastest yaw acceleration the tyres themselves can generate. The drift and stability
+    // regulators must be able to out-muscle it, or a light short bike would spin straight past
+    // them.
+    const tyreYaw = (grip * 1.3 * mass * gravity * dims.wheelbase * 0.5) / inertia.y;
+    const yawAuthority = clamp(2.4 * tyreYaw, 20, 90);
+
     return {
         id: vehicle.id,
         type: vehicle.type,
@@ -59,6 +65,7 @@ export function buildVehicleSpec(vehicle, upgrades = {}, { gravity = DEFAULT_GRA
         body: dims.body,
         comHeight: dims.comHeight,
         inertia,
+        yawAuthority,
         suspension: {
             stiffness,
             damping,
@@ -85,7 +92,12 @@ export function buildVehicleSpec(vehicle, upgrades = {}, { gravity = DEFAULT_GRA
             grip,
             maxSteer,
             steerSpeedRef: isBike ? 38 : 34,
-            driftRearGrip: 0.4,
+            speedGrip: isBike ? 0.3 : 0.32,
+            speedGripRef: 38,
+            driftRearGrip: 0.55,
+            driftFrontBoost: 0.3,
+            driftSlip: isBike ? 0.44 : 0.5,
+            driftPull: 1.0,
             lateralTau: 0.045,
             rollingResistance: 0.012
         },

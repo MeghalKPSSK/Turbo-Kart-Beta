@@ -93,6 +93,7 @@ export class RoadRaceGame {
         this.finished = false;
         this.ready = false;
         this.disposed = false;
+        this.disposeDone = false;
         this.elapsed = 0;
         this.clock = 0;
         this.accumulator = 0;
@@ -866,28 +867,36 @@ export class RoadRaceGame {
         };
     }
 
+    // Idempotent and failure-proof: React calls this from an effect cleanup, and an exception
+    // there would take the whole UI down with it.
     dispose() {
+        if (this.disposeDone) return;
+        this.disposeDone = true;
         this.disposed = true;
-        cancelAnimationFrame(this.animationFrame);
-        this.resizeObserver?.disconnect();
-        this.audio.dispose();
-        if (typeof window !== 'undefined' && window.__trl?.game === this) delete window.__trl;
-        for (const racer of this.racers) {
-            racer.nitroFx.dispose();
-            racer.visual.dispose();
+        const safely = (label, fn) => {
+            try { fn(); } catch (error) { console.warn(`[game] cleanup step "${label}" failed`, error); }
+        };
+        safely('frame', () => cancelAnimationFrame(this.animationFrame));
+        safely('resize', () => this.resizeObserver?.disconnect());
+        safely('audio', () => this.audio?.dispose());
+        safely('debug hook', () => { if (typeof window !== 'undefined' && window.__trl?.game === this) delete window.__trl; });
+        for (const racer of this.racers || []) {
+            safely('nitro effect', () => racer.nitroFx?.dispose());
+            safely('vehicle visual', () => racer.visual?.dispose());
         }
-        this.coinField?.dispose();
-        this.nitroPickups?.dispose();
-        this.particles?.dispose();
-        this.smoke?.dispose();
-        this.skids?.dispose();
-        this.glow?.dispose();
-        this.physics?.dispose();
-        this.environment?.dispose();
-        if (this.renderer) {
+        safely('coins', () => this.coinField?.dispose());
+        safely('nitro pickups', () => this.nitroPickups?.dispose());
+        safely('particles', () => this.particles?.dispose());
+        safely('smoke', () => this.smoke?.dispose());
+        safely('skid marks', () => this.skids?.dispose());
+        safely('glow texture', () => this.glow?.dispose());
+        safely('physics', () => this.physics?.dispose());
+        safely('environment', () => this.environment?.dispose());
+        safely('renderer', () => {
+            if (!this.renderer) return;
             this.renderer.dispose();
             this.renderer.domElement.remove();
-        }
-        this.scene?.clear();
+        });
+        safely('scene', () => this.scene?.clear());
     }
 }

@@ -223,12 +223,12 @@ export class PhysicsWorld {
 
     addVehicle(vehicle) {
         this.vehicles.push(vehicle);
-        this.owners.set(vehicle.collider.handle, { type: 'vehicle', vehicle });
+        for (const collider of vehicle.colliders) this.owners.set(collider.handle, { type: 'vehicle', vehicle });
     }
 
     removeVehicle(vehicle) {
         this.vehicles = this.vehicles.filter((v) => v !== vehicle);
-        this.owners.delete(vehicle.collider.handle);
+        for (const collider of vehicle.colliders) this.owners.delete(collider.handle);
         this.world.removeRigidBody(vehicle.body);
     }
 
@@ -282,7 +282,10 @@ export class PhysicsWorld {
         return list;
     }
 
+    // Safe to call more than once: freeing a Rapier object twice throws inside the wasm glue.
     dispose() {
+        if (this.disposed) return;
+        this.disposed = true;
         this.events.free();
         this.world.free();
     }

@@ -31,9 +31,10 @@ export function trackMeta(trackId) {
     return JSON.parse(readFileSync(path, 'utf8'));
 }
 
-export async function loadWorld(trackId) {
+export async function loadWorld(trackId, { hazards = true } = {}) {
     await initRapier();
     const meta = trackMeta(trackId);
+    if (!hazards) meta.hazards = [];
     const track = new TrackModel(meta);
     const road = roadGeometryFromGlb(resolve(MODELS, `${trackId}.glb`));
     const physics = new PhysicsWorld(RAPIER, track, road);

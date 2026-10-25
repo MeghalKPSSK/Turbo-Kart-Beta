@@ -7,6 +7,9 @@ import { FIXED_DT, GROUP, groups } from './trackWorld.js';
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
+// Handbrake drifts only start above this speed (m/s).
+const DRIFT_MIN_SPEED = 11;
+
 // Rotate (x, y, z) by quaternion q into `out`.
 function rotate(q, x, y, z, out) {
     const ix = q.w * x + q.y * z - q.z * y;
@@ -95,6 +98,21 @@ export class Vehicle {
         );
         this.body = body;
         this.collider = collider;
+        // Massless extra boxes cover the parts standing above the tub (see roadRacing.js).
+        this.colliders = [collider];
+        for (const part of spec.body.parts || []) {
+            this.colliders.push(physics.world.createCollider(
+                RAPIER.ColliderDesc.cuboid(part.half[0], part.half[1], part.half[2])
+                    .setTranslation(part.center[0], part.center[1], part.center[2])
+                    .setDensity(0)
+                    .setFriction(0.25)
+                    .setRestitution(0.2)
+                    .setCollisionGroups(groups(GROUP.VEHICLE, GROUP.WORLD | GROUP.OBSTACLE | GROUP.VEHICLE))
+                    .setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS)
+                    .setContactForceEventThreshold(spec.mass * 6),
+                body
+            ));
+        }
 
         this.input = { throttle: 0, brake: 0, steer: 0, nitro: false, handbrake: false };
         this.steer = 0;
@@ -136,6 +154,13 @@ export class Vehicle {
         this.driftTime = 0;
         this.driftCharge = 0;
         this.driftAngle = 0;
+        this.driftBlend = 0;       // 0..1, how far into a handbrake drift the car is
+        this.driftSlip = 0;        // slip angle (rad) the drift controller is currently aiming for
+        this.courseRate = 0;       // how fast the velocity vector is turning (rad/s, + = left)
+        this._course = 0;
+        this._airHint = -1;
+        this._airProj = {};
+        this._airFrame = {};
         this.lateralAccel = 0;
         this.longAccel = 0;
         this.health = 1;
@@ -188,6 +213,10 @@ export class Vehicle {
         this.flippedTime = 0;
         for (const wheel of this.wheels) { wheel.springLength = this.spec.suspension.springLengthAtRest; wheel.grounded = false; }
         this.invalid = false;
+        this.driftBlend = 0;
+        this.driftSlip = 0;
+        this.courseRate = 0;
+        this._course = Math.atan2(forward.x, forward.z);
         this.readState();
         this.snapshot();
         this.snapshot();
@@ -196,7 +225,7 @@ export class Vehicle {
 
     setCollisionMode(ghost) {
         const filter = ghost ? GROUP.WORLD | GROUP.OBSTACLE : GROUP.WORLD | GROUP.OBSTACLE | GROUP.VEHICLE;
-        this.collider.setCollisionGroups(groups(ghost ? GROUP.GHOST : GROUP.VEHICLE, filter));
+        for (const collider of this.colliders) collider.setCollisionGroups(groups(ghost ? GROUP.GHOST : GROUP.VEHICLE, filter));
     }
 
     readState() {
@@ -226,6 +255,27 @@ export class Vehicle {
         p.q.x = c.q.x; p.q.y = c.q.y; p.q.z = c.q.z; p.q.w = c.q.w;
         c.p.x = this.position.x; c.p.y = this.position.y; c.p.z = this.position.z;
         c.q.x = this.quaternion.x; c.q.y = this.quaternion.y; c.q.z = this.quaternion.z; c.q.w = this.quaternion.w;
+    }
+
+    // Largest steering angle (rad) the front wheels can reach at `speed` (m/s).
+    steerLimit(speed = this.speedAbs) {
+        const tires = this.spec.tires;
+        return tires.maxSteer * Math.max(0.14, 1 / (1 + (speed / tires.steerSpeedRef) ** 1.5));
+    }
+
+    // Extra tyre grip that builds up with speed (arcade "stickiness"), 1 at a standstill.
+    speedGripBoost(speed = this.speedAbs) {
+        const tires = this.spec.tires;
+        const t = clamp(speed / tires.speedGripRef, 0, 1);
+        return 1 + tires.speedGrip * t * t * (3 - 2 * t);
+    }
+
+    // Lateral acceleration (m/s²) the car can hold at `speed`: tyre grip, speed grip and the
+    // extra load from aerodynamic downforce. The yaw governor and the AI both use this.
+    latAccelLimit(speed = this.speedAbs) {
+        const { tires, engine, gravity } = this.spec;
+        const x = Math.min(1.3, speed / engine.topSpeed);
+        return tires.grip * gravity * this.speedGripBoost(speed) * (1 + 0.45 * x * x);
     }
 
     // ----------------------------------------------------------------------------------
@@ -278,13 +328,30 @@ export class Vehicle {
             drive = 1;
         }
 
+        // Handbrake drift state: blends in quickly and out more slowly, so entering and leaving a
+        // drift never jolts the car.
+        const flatSpeed = Math.hypot(vel.x, vel.z);
+        const driftIntent = !wrecked && input.handbrake && flatSpeed > DRIFT_MIN_SPEED && vf > 0 && this.groundedCount >= 2;
+        this.driftBlend += ((driftIntent ? 1 : 0) - this.driftBlend) * Math.min(1, (driftIntent ? 7 : 4.5) * dt);
+        if (this.driftBlend < 0.004) this.driftBlend = 0;
+        const drift = this.driftBlend;
+        // How fast the direction of travel is turning (needed to hold a slip angle).
+        if (flatSpeed > 4) {
+            const course = Math.atan2(vel.x, vel.z);
+            let delta = course - this._course;
+            if (delta > Math.PI) delta -= 2 * Math.PI; else if (delta < -Math.PI) delta += 2 * Math.PI;
+            this._course = course;
+            this.courseRate += (clamp(delta / dt, -4, 4) - this.courseRate) * Math.min(1, dt * 30);
+        } else {
+            this._course = Math.atan2(vel.x, vel.z);
+            this.courseRate *= 0.9;
+        }
+
         // Steering: slower build-up at speed, quicker return to centre.
         const steerTarget = wrecked ? 0 : clamp(input.steer, -1, 1);
         const rate = (Math.abs(steerTarget) > Math.abs(this.steer) ? 7.5 : 11) / (1 + this.speedAbs / 70);
         this.steer += clamp(steerTarget - this.steer, -rate * dt, rate * dt);
-        const speedFactor = 1 / (1 + (this.speedAbs / tires.steerSpeedRef) ** 1.5);
-        const driftBoost = input.handbrake ? 1.18 : 1;
-        this.steerAngle = this.steer * tires.maxSteer * Math.max(0.14, speedFactor) * driftBoost;
+        this.steerAngle = this.steer * this.steerLimit() * (1 + 0.18 * drift);
 
         // --- engine ------------------------------------------------------------------
         let engineForce = 0;
@@ -389,9 +456,13 @@ export class Vehicle {
         const handbrake = !wrecked && input.handbrake;
         const brakeTotal = brake * eng.brakeForce;
         const wheelMass = spec.mass * 0.25;
+        const gripBoost = this.speedGripBoost();
         let slidingWheels = 0;
         let latImpulseSum = 0;
         let longImpulseSum = 0;
+        let scrub = 0;
+        const travel = this.speedAbs > 0.5 ? 1 / this.speedAbs : 0;
+        const uvx = vel.x * travel, uvy = vel.y * travel, uvz = vel.z * travel;
         for (const wheel of wheels) {
             if (!wheel.grounded) { wheel.slip = 0; continue; }
             const def = wheel.def;
@@ -415,10 +486,13 @@ export class Vehicle {
             wheel.vLong = vLong;
 
             const rear = !def.front;
-            const gripScale = (rear && handbrake ? tires.driftRearGrip : 1) * this.surfaceGrip;
+            // Handbrake drift: the rear tyres give way, the front tyres bite harder, and the
+            // slip penalty is removed so a slide stays controllable instead of snapping into a spin.
+            const driftGrip = rear ? 1 - drift * (1 - tires.driftRearGrip) : 1 + drift * tires.driftFrontBoost;
+            const gripScale = driftGrip * this.surfaceGrip;
             const slip = Math.atan2(vLat, Math.abs(vLong) + 2);
-            const fade = clamp((Math.abs(slip) - 0.2) / 0.38, 0, 1);
-            const mu = tires.grip * gripScale * (1 - 0.32 * fade);
+            const fade = clamp((Math.abs(slip) - 0.28) / 0.5, 0, 1) * (1 - 0.8 * drift);
+            const mu = tires.grip * gripBoost * gripScale * (1 - 0.2 * fade);
             const limit = mu * load;
 
             // Longitudinal: engine share by load, brakes, rolling resistance.
@@ -429,7 +503,8 @@ export class Vehicle {
                 longForce -= Math.sign(vLong || vf) * Math.min(brakeTotal * share, Math.abs(vLong) * wheelMass / dt);
             }
             if (handbrake && rear && totalLoad > 1) {
-                longForce -= Math.sign(vLong) * Math.min(eng.brakeForce * 0.35 * (load / totalLoad), Math.abs(vLong) * wheelMass / dt * 0.5);
+                // A standing handbrake brakes; in a drift it only unloads the rear axle.
+                longForce -= Math.sign(vLong) * Math.min(eng.brakeForce * (0.35 - 0.26 * drift) * (load / totalLoad), Math.abs(vLong) * wheelMass / dt * 0.5);
             }
             longForce -= tires.rollingResistance * load * clamp(vLong, -1, 1);
             // Traction control: engine force may use at most ~85% of the grip so there is always
@@ -457,6 +532,15 @@ export class Vehicle {
             body.applyImpulseAtPoint({ x: ix, y: iy, z: iz }, point, true);
             latImpulseSum += latForce;
             longImpulseSum += longForce;
+            // How much of this wheel's sideways force pushes along (or against) the direction of travel.
+            scrub += latForce * (lx * uvx + ly * uvy + lz * uvz);
+        }
+
+        // Drifting keeps its speed: cancel most of the drag the sideways tyre forces would
+        // cause once the nose points away from the direction of travel.
+        if (drift > 0 && scrub < 0 && this.speedAbs > 4) {
+            const give = -scrub * 0.9 * drift * dt;
+            body.applyImpulse({ x: uvx * give, y: uvy * give, z: uvz * give }, true);
         }
 
         // --- aero ---------------------------------------------------------------------------
@@ -492,14 +576,49 @@ export class Vehicle {
                 z: (ez * kp - wRoll.z * kd) * inertia * dt
             }, true);
 
-            // Yaw assist toward the bicycle-model yaw rate for the current steering angle.
+            // Yaw assist toward the bicycle-model yaw rate for the current steering angle, never
+            // asking for more than the tyres can deliver.
             if (!wrecked) {
-                let target = (vf * Math.tan(this.steerAngle)) / spec.wheelbase;
-                if (handbrake) target *= 1.45;
-                const maxYaw = (tires.grip * spec.gravity * 0.9) / Math.max(8, Math.abs(vf));
-                target = clamp(target, -maxYaw * (handbrake ? 1.6 : 1), maxYaw * (handbrake ? 1.6 : 1));
-                const assist = clamp((target - yawRate) * 3.8, -14, 14) * share * spec.inertia.y;
+                const maxYaw = (this.latAccelLimit(Math.abs(vf)) * 0.92) / Math.max(8, Math.abs(vf));
+                const target = clamp((vf * Math.tan(this.steerAngle)) / spec.wheelbase, -maxYaw, maxYaw);
+                const beta = flatSpeed > 6 ? Math.atan2(this.lateralSpeed, Math.max(2, this.speed)) : 0;
+                // The slip angle the driver is asking for: 0 normally, set by the steering in a drift.
+                let slipGoal = 0;
+                if (driftIntent) slipGoal = -clamp(this.steer * 1.3, -1, 1) * tires.driftSlip * clamp((flatSpeed - 8) / 14, 0.35, 1);
+                this.driftSlip += clamp(slipGoal - this.driftSlip, -2.4 * dt, 2.4 * dt);
+
+                // Slip regulator. It owns the yaw rate (a servo, so tyre moments cannot overpower
+                // it) whenever the car is drifting or sliding badly:
+                //  - drifting: the nose is turned to exactly the slip angle the steering asks for
+                //    and held there. The angle is capped, so the car cannot spin, and releasing the
+                //    handbrake (goal 0) straightens it up smoothly.
+                //  - grip mode: ordinary driving never gets near it, but a car sliding hard
+                //    (curb, wall, brake-and-turn) has its nose brought back in line with the
+                //    direction of travel instead of letting the slide turn into a spin.
+                let servo;
+                let wanted;
+                if (drift > 0) {
+                    servo = drift;
+                    wanted = this.courseRate + clamp(3.4 * (beta - this.driftSlip), -1.5, 1.5);
+                } else {
+                    this.driftSlip = 0;
+                    servo = clamp((Math.abs(beta) - 0.14) / 0.2, 0, 1);
+                    wanted = this.courseRate + 3.2 * beta;
+                }
+                const assist = clamp((target - yawRate) * 3.8, -14, 14) * (1 - servo) * share * spec.inertia.y;
                 body.applyTorqueImpulse({ x: up.x * assist * dt, y: up.y * assist * dt, z: up.z * assist * dt }, true);
+                if (servo > 0.001) {
+                    const dYaw = (clamp(wanted, -2.8, 2.8) - yawRate) * (1 - Math.exp(-90 * dt)) * servo * share;
+                    const now = body.angvel();
+                    body.setAngvel({ x: now.x + up.x * dYaw, y: now.y + up.y * dYaw, z: now.z + up.z * dYaw }, true);
+                }
+                if (driftIntent && drift > 0.05 && flatSpeed > 6) {
+                    // Arcade centripetal pull toward the inside of the drift, perpendicular to the
+                    // direction of travel (so it never adds or removes speed).
+                    const pull = tires.driftPull * spec.gravity * Math.abs(this.steer) * drift * clamp((flatSpeed - 10) / 12, 0, 1);
+                    const impulse = spec.mass * pull * dt * Math.sign(this.steer) * share;
+                    body.applyImpulse({ x: (vel.z / flatSpeed) * impulse, y: 0, z: (-vel.x / flatSpeed) * impulse }, true);
+                }
             }
         } else if (grounded === 0 && speed > 3) {
             // Air control: level the car for landing and let the nose follow the flight path.
@@ -519,6 +638,7 @@ export class Vehicle {
                 y: (left.y * pitchError * pathGain - w.y * damp) * air * dt,
                 z: (levelZ * levelGain + left.z * pitchError * pathGain - w.z * damp) * air * dt
             }, true);
+            if (!wrecked) this.steerInAir(dt);
         }
 
         // Bookkeeping for the next readState().
@@ -526,6 +646,32 @@ export class Vehicle {
         this._lastLongForce = longImpulseSum;
         this._sliding = slidingWheels;
         this._prevVel.x = vel.x; this._prevVel.y = vel.y; this._prevVel.z = vel.z;
+    }
+
+    // Flight assist. A jump over a bend would otherwise carry the car straight on into the
+    // barrier, and nothing can be steered in the air, so while airborne the direction of travel
+    // (and the nose with it) is turned gently along the road, and the player's steering nudges it
+    // sideways by a few metres to line up the landing. Speed is never changed.
+    steerInAir(dt) {
+        const track = this.physics.track;
+        if (!track || this.airTime < 0.06) return;
+        const vel = this.velocity;
+        const flat = Math.hypot(vel.x, vel.z);
+        if (flat < 8) return;
+        const proj = track.project(this.position.x, this.position.z, this._airHint, this._airProj);
+        this._airHint = proj.index;
+        if (Math.abs(proj.lane) > track.halfWidth + 5) return;
+        const frame = track.frameAt(proj.s, this._airFrame);
+        let error = Math.atan2(frame.tx, frame.tz) - Math.atan2(vel.x, vel.z);
+        if (error > Math.PI) error -= 2 * Math.PI; else if (error < -Math.PI) error += 2 * Math.PI;
+        const fade = clamp((this.airTime - 0.06) / 0.2, 0, 1);
+        const rate = (clamp(error * 2.4, -0.4, 0.4) + this.steer * 0.2) * fade;
+        const turn = rate * dt;
+        const c = Math.cos(turn), s = Math.sin(turn);
+        const now = this.body.linvel();
+        this.body.setLinvel({ x: now.x * c + now.z * s, y: now.y, z: now.z * c - now.x * s }, true);
+        const w = this.body.angvel();
+        this.body.setAngvel({ x: w.x, y: w.y + (rate - w.y) * 0.2 * fade, z: w.z }, true);
     }
 
     // ----------------------------------------------------------------------------------

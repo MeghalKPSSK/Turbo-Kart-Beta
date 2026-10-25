@@ -9,7 +9,18 @@ const carDims = (frontZ, rearZ, frontR, rearR) => ({
         { name: 'RL', x: 1.12, y: rearR, z: rearZ, radius: rearR, steered: false, driven: true, front: false },
         { name: 'RR', x: -1.12, y: rearR, z: rearZ, radius: rearR, steered: false, driven: true, front: false }
     ],
-    body: { half: [1.2, 0.32, 2.05], center: [0, 0.82, 0.2] },
+    // `parts` are extra, massless collision boxes that cover what stands above the tub (the
+    // cockpit / halo column and the rear wing), so a flipped car rests on them instead of
+    // sinking into the road. verify-assets checks them against the model.
+    body: {
+        half: [1.2, 0.32, 2.05],
+        center: [0, 0.82, 0.2],
+        parts: [
+            { half: [0.5, 0.52, 0.7], center: [0, 1.55, 0.2] },     // cockpit, halo and airbox
+            { half: [0.5, 0.45, 0.55], center: [0, 1.35, -0.9] },   // engine cover
+            { half: [1.25, 0.27, 0.32], center: [0, 1.8, -1.8] }    // rear wing
+        ]
+    },
     comHeight: 0.4,
     mass: 1000,
     length: 4.24,
@@ -27,7 +38,14 @@ const bikeDims = (radius) => ({
         { name: 'RL', x: 0.3, y: radius, z: -1.05, radius, steered: false, driven: true, front: false },
         { name: 'RR', x: -0.3, y: radius, z: -1.05, radius, steered: false, driven: true, front: false }
     ],
-    body: { half: [0.36, 0.55, 1.4], center: [0, 1.0, 0] },
+    body: {
+        half: [0.36, 0.55, 1.4],
+        center: [0, 1.0, 0],
+        parts: [
+            { half: [0.3, 0.27, 0.5], center: [0, 1.8, 0.15] },     // rider
+            { half: [0.3, 0.12, 1.2], center: [0, 1.62, 0] }        // tank, screen and tail
+        ]
+    },
     comHeight: 0.55,
     mass: 460,
     length: 3.3,

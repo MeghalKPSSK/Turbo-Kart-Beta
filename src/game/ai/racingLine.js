@@ -36,7 +36,9 @@ export function buildRacingLine(track, { maxOffset = 6.5, gain = 330 } = {}) {
 
 // Fastest speed the AI will carry through every sample, limited by grip (with aero
 // downforce) and by how late it can brake for the next slow section.
-export function buildSpeedProfile(track, line, { grip, gravity, topSpeed, brakeDecel, downforceFraction = 0.45, margin = 0.9 }) {
+// `latAccel(speed)` (optional) is the lateral acceleration the car can really hold at a given
+// speed; without it a fixed grip with a simple downforce term is assumed.
+export function buildSpeedProfile(track, line, { grip, gravity, topSpeed, brakeDecel, downforceFraction = 0.45, margin = 0.9, latAccel = null }) {
     const n = track.count;
     const x = new Float64Array(n);
     const z = new Float64Array(n);
@@ -60,8 +62,17 @@ export function buildSpeedProfile(track, line, { grip, gravity, topSpeed, brakeD
         const cross = Math.abs(abx * acz - abz * acx);
         const lab = Math.hypot(abx, abz), lbc = Math.hypot(bcx, bcz), lac = Math.hypot(acx, acz);
         const curvature = cross < 1e-9 ? 0 : (2 * cross) / (lab * lbc * lac);
+        const cap = topSpeed * 1.2;
+        if (latAccel) {
+            if (curvature <= 1e-6) { speed[i] = cap; continue; }
+            // Grip grows with speed, so the cornering speed is a fixed point: v = sqrt(a(v) / k).
+            let v = Math.min(cap, Math.sqrt((latAccel(0) * margin) / curvature));
+            for (let k = 0; k < 8; k += 1) v = 0.5 * (v + Math.min(cap, Math.sqrt((latAccel(v) * margin) / curvature)));
+            speed[i] = v;
+            continue;
+        }
         const free = curvature - c;
-        speed[i] = free <= 1e-6 ? topSpeed * 1.2 : Math.min(topSpeed * 1.2, Math.sqrt(aLat / free));
+        speed[i] = free <= 1e-6 ? cap : Math.min(cap, Math.sqrt(aLat / free));
     }
     // Backward pass: never be going faster than we can brake down to the next limit.
     for (let pass = 0; pass < 3; pass += 1) {

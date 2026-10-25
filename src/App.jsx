@@ -243,15 +243,27 @@ export default function App() {
         };
     }, [screen, racePhase]);
 
+    useEffect(() => {
+        if (screen !== 'race' || racePhase !== 'paused') return undefined;
+        const handleKey = (event) => {
+            if (event.key !== 'Escape' || event.repeat) return;
+            event.preventDefault();
+            gameRef.current?.setPaused(false);
+            setRacePhase('running');
+        };
+        window.addEventListener('keydown', handleKey);
+        return () => window.removeEventListener('keydown', handleKey);
+    }, [screen, racePhase]);
+
     const resumeRace = () => {
         gameRef.current?.setPaused(false);
         setRacePhase('running');
     };
 
     const exitRace = () => {
-        gameRef.current?.dispose();
-        gameRef.current = null;
+        // The race effect's cleanup disposes the game exactly once when the screen changes.
         setRacePhase('idle');
+        setHud(null);
         setScreen('home');
     };
 
@@ -455,7 +467,7 @@ export default function App() {
                             onPause={() => { setRacePhase('paused'); gameRef.current?.setPaused(true); }}
                         />
                     )}
-                    {racePhase === 'paused' && <div className="race-overlay"><div className="overlay-card"><span className="eyebrow">TAKE A BREATHER</span><h2>RACE PAUSED</h2><p>{track.name} · {vehicle.name}</p><button className="button-primary" onClick={resumeRace}>BACK TO THE ROAD <span>↗</span></button><button className="button-secondary" onClick={exitRace}>QUIT TO THE LEAGUE</button></div></div>}
+                    {racePhase === 'paused' && <div className="race-overlay"><div className="overlay-card"><span className="eyebrow">TAKE A BREATHER</span><h2>RACE PAUSED</h2><p>{track.name} · {vehicle.name}</p><button className="button-primary" onClick={resumeRace}>BACK TO THE ROAD <span>↗</span></button><button className="button-secondary" onClick={exitRace}>QUIT TO HOME</button></div></div>}
                     {racePhase === 'error' && <div className="race-overlay"><div className="overlay-card"><span className="eyebrow">RACE SETUP</span><h2>COULD NOT LOAD</h2><p>{gameError}</p><button className="button-primary" onClick={() => setScreen('courses')}>BACK TO ROUTES <span>↗</span></button></div></div>}
                 </section>
             )}
