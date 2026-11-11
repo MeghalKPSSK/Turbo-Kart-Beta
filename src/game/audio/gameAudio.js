@@ -2,9 +2,22 @@
 // effects. Nothing is loaded from disk, and audio only starts after the first key press.
 
 export class GameAudio {
-    constructor() {
+    constructor(volume = 1) {
         this.context = null;
         this.nodes = null;
+        this.volume = volume;
+        this.muted = false;
+    }
+
+    // Player volume setting, 0..1.
+    setVolume(volume) {
+        this.volume = Math.min(1, Math.max(0, Number(volume) || 0));
+        this.applyGain();
+    }
+
+    applyGain() {
+        if (!this.nodes) return;
+        this.nodes.master.gain.setTargetAtTime(this.muted ? 0 : 0.55 * this.volume, this.context.currentTime, 0.05);
     }
 
     ensure() {
@@ -14,7 +27,7 @@ export class GameAudio {
         try {
             const ctx = new AudioContextClass();
             const master = ctx.createGain();
-            master.gain.value = 0.55;
+            master.gain.value = this.muted ? 0 : 0.55 * this.volume;
             const compressor = ctx.createDynamicsCompressor();
             master.connect(compressor);
             compressor.connect(ctx.destination);
@@ -80,8 +93,8 @@ export class GameAudio {
     }
 
     setMuted(muted) {
-        if (!this.nodes) return;
-        this.nodes.master.gain.setTargetAtTime(muted ? 0 : 0.55, this.context.currentTime, 0.05);
+        this.muted = Boolean(muted);
+        this.applyGain();
     }
 
     // state: { rpm, throttle, speedRatio, nitro (0..1), slip (0..1), airborne, running }

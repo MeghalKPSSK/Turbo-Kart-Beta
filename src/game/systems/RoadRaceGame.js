@@ -27,7 +27,10 @@ const MAX_STEPS_PER_FRAME = Math.ceil(MAX_FRAME_TIME / FIXED_DT);
 
 function loadAsset(filename) {
     if (!modelCache.has(filename)) {
-        modelCache.set(filename, loader.loadAsync(`${modelBase}${filename}`).then((result) => result.scene));
+        const pending = loader.loadAsync(`${modelBase}${filename}`).then((result) => result.scene);
+        // A failed download must not be remembered, or every later race would fail the same way.
+        pending.catch(() => modelCache.delete(filename));
+        modelCache.set(filename, pending);
     }
     return modelCache.get(filename);
 }
@@ -81,12 +84,13 @@ const TRICK_UP2 = new THREE.Vector3();
 const NITRO_PICKUP_GAIN = 0.35;
 
 export class RoadRaceGame {
-    constructor(container, { track, vehicle, paint, upgrades, onReady, onHUD, onFinish, onError }) {
+    constructor(container, { track, vehicle, paint, upgrades, quality, volume = 1, onReady, onHUD, onFinish, onError }) {
         this.container = container;
         this.trackInfo = track;
         this.vehicleInfo = vehicle;
         this.paint = paint;
         this.upgrades = upgrades || {};
+        this.quality = { pixelRatio: 1.75, antialias: true, shadows: 2048, particles: 1, ...(quality || {}) };
         this.onReady = onReady;
         this.onHUD = onHUD;
         this.onFinish = onFinish;
@@ -110,6 +114,9 @@ export class RoadRaceGame {
         this.banner = { text: '', sub: '', kind: '', timer: 0 };
         this.finishOrder = [];
         this.input = { accelerate: false, brake: false, left: false, right: false, boost: false, drift: false };
+        // Analogue input from a gamepad, added to the digital keys above.
+        this.analog = { steer: 0, throttle: 0, brake: 0 };
+        this.steerInput = 0;
         this.resetCooldown = 0;
         this.stuckTime = 0;
         this.score = 0;
@@ -122,7 +129,7 @@ export class RoadRaceGame {
         this.damageFlash = 0;
         this.autopilot = null;
         this.eventLog = [];
-        this.audio = new GameAudio();
+        this.audio = new GameAudio(volume);
         this.frame = this.frame.bind(this);
         this.resize = this.resize.bind(this);
         this.init().catch((error) => {
@@ -157,10 +164,11 @@ export class RoadRaceGame {
         this.raceLength = info.laps || 3;
 
         this.createRenderer();
+        const shadows = this.quality.shadows > 0;
         this.trackScene.traverse((child) => {
             if (!child.isMesh) return;
-            child.castShadow = true;
-            child.receiveShadow = true;
+            child.castShadow = shadows;
+            child.receiveShadow = shadows;
         });
         const maxAnisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
         this.trackScene.traverse((object) => {
@@ -174,8 +182,8 @@ export class RoadRaceGame {
         this.scene.add(this.trackScene);
 
         this.glow = glowTexture();
-        this.particles = new ParticlePool(this.scene, { max: 1600, additive: true });
-        this.smoke = new ParticlePool(this.scene, { max: 900, additive: false });
+        this.particles = new ParticlePool(this.scene, { max: Math.round(1600 * this.quality.particles), additive: true });
+        this.smoke = new ParticlePool(this.scene, { max: Math.round(900 * this.quality.particles), additive: false });
         this.skids = new SkidMarks(this.scene);
         this.coinField = coinTemplate ? new CoinField(this.scene, this.model, coinTemplate) : null;
         this.nitroPickups = new NitroPickups(this.scene, this.model, this.glow);
@@ -212,13 +220,13 @@ export class RoadRaceGame {
         const info = this.trackInfo;
         const width = Math.max(1, this.container.clientWidth);
         const height = Math.max(1, this.container.clientHeight);
-        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+        this.renderer = new THREE.WebGLRenderer({ antialias: this.quality.antialias, powerPreference: 'high-performance' });
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.quality.pixelRatio));
         this.renderer.setSize(width, height);
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 0.98;
-        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.enabled = this.quality.shadows > 0;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         this.container.appendChild(this.renderer.domElement);
 
@@ -235,8 +243,8 @@ export class RoadRaceGame {
         this.camera = new THREE.PerspectiveCamera(64, width / height, 0.1, 1900);
         this.scene.add(new THREE.HemisphereLight(0xd8e8f3, 0x45483e, 1.8));
         this.sun = new THREE.DirectionalLight(0xffe1c2, 3.1);
-        this.sun.castShadow = true;
-        this.sun.shadow.mapSize.set(2048, 2048);
+        this.sun.castShadow = this.quality.shadows > 0;
+        this.sun.shadow.mapSize.set(this.quality.shadows || 512, this.quality.shadows || 512);
         const extent = 85;
         Object.assign(this.sun.shadow.camera, { left: -extent, right: extent, top: extent, bottom: -extent, near: 1, far: 420 });
         this.sun.shadow.bias = -0.0004;
@@ -278,7 +286,7 @@ export class RoadRaceGame {
             vehicle.hold = true;
             vehicle.nitro = isPlayer ? 0.3 : 0.2;
             this.physics.addVehicle(vehicle);
-            const visual = createVehicleVisual(this.vehicleAssets.get(vehicleInfo.id), { paint, spec });
+            const visual = createVehicleVisual(this.vehicleAssets.get(vehicleInfo.id), { paint, spec, castShadow: this.quality.shadows > 0 });
             this.scene.add(visual.root);
             const tracker = new ProgressTracker(this.model, vehicle);
             const driver = isPlayer ? null : new AIDriver({
@@ -332,12 +340,28 @@ export class RoadRaceGame {
         this.input[name] = pressed;
     }
 
+    // Analogue steering (-1 right .. 1 left) and pedals (0..1) from a gamepad.
+    setAnalog({ steer = 0, throttle = 0, brake = 0 } = {}) {
+        const clean = (value, lo) => (Number.isFinite(value) ? Math.min(1, Math.max(lo, value)) : 0);
+        this.analog.steer = clean(steer, -1);
+        this.analog.throttle = clean(throttle, 0);
+        this.analog.brake = clean(brake, 0);
+        if (this.analog.throttle > 0.1 || this.analog.brake > 0.1) this.ensureAudio();
+    }
+
+    setVolume(volume) {
+        this.audio.setVolume(volume);
+    }
+
     setPaused(value) {
         const paused = Boolean(value);
         if (!paused && !this.started) this.startRace();
         this.paused = paused;
         this.lastFrame = performance.now();
-        if (paused) Object.keys(this.input).forEach((key) => { this.input[key] = false; });
+        if (paused) {
+            Object.keys(this.input).forEach((key) => { this.input[key] = false; });
+            this.setAnalog();
+        }
         this.audio.setMuted(paused);
     }
 
@@ -428,9 +452,11 @@ export class RoadRaceGame {
             } else if (racer.isPlayer) {
                 const input = racer.vehicle.input;
                 const live = this.started && !this.finished;
-                input.throttle = live && this.input.accelerate ? 1 : 0;
-                input.brake = live && this.input.brake ? 1 : 0;
-                input.steer = live ? (this.input.left ? 1 : 0) - (this.input.right ? 1 : 0) : 0;
+                const digitalSteer = (this.input.left ? 1 : 0) - (this.input.right ? 1 : 0);
+                this.steerInput = Math.min(1, Math.max(-1, digitalSteer + this.analog.steer));
+                input.throttle = live ? Math.max(this.input.accelerate ? 1 : 0, this.analog.throttle) : 0;
+                input.brake = live ? Math.max(this.input.brake ? 1 : 0, this.analog.brake) : 0;
+                input.steer = live ? this.steerInput : 0;
                 input.nitro = live && this.input.boost;
                 input.handbrake = live && this.input.drift;
             } else {
@@ -681,7 +707,7 @@ export class RoadRaceGame {
 
         // Air tricks: steer in mid-air to barrel roll; finish the roll for nitro.
         const air = v.airborne && v.airTime > 0.3;
-        const steer = (this.input.left ? 1 : 0) - (this.input.right ? 1 : 0);
+        const steer = Math.abs(this.steerInput) > 0.3 ? Math.sign(this.steerInput) : 0;
         if (air && steer !== 0) { this.trick.roll += steer * 7.2 * dt; this.trick.active = true; }
         if (landed) {
             const turns = Math.abs(this.trick.roll) / (Math.PI * 2);
@@ -782,7 +808,7 @@ export class RoadRaceGame {
         const v = p.vehicle;
         const slide = Math.min(1, (Math.abs(v.slipAngle) - 0.08) * 3 + (v.drifting ? 0.35 : 0)) * (v.speedAbs > 8 ? 1 : 0);
         this.audio.update({
-            rpm: v.rpm, throttle: this.input.accelerate && this.started ? 1 : 0.1, running: !this.paused && !this.finished && this.ready,
+            rpm: v.rpm, throttle: this.started ? Math.max(0.1, v.input.throttle) : 0.1, running: !this.paused && !this.finished && this.ready,
             speedRatio, nitro, slip: Math.max(0, slide), airborne: v.airborne
         });
     }
@@ -914,6 +940,8 @@ export class RoadRaceGame {
         safely('renderer', () => {
             if (!this.renderer) return;
             this.renderer.dispose();
+            // Browsers allow only a handful of live WebGL contexts; give this one back now.
+            this.renderer.forceContextLoss();
             this.renderer.domElement.remove();
         });
         safely('scene', () => this.scene?.clear());

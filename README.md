@@ -1,10 +1,9 @@
 # Turbo Road League
 
 Turbo Road League is an original road-racing game built around Blender-authored
-open-wheel cars, rider-equipped bikes, and closed scenic circuits. Its racing
-focus is clean competition: steering, braking, cornering, drifting, boost, and
-terrain jumps. There are no fighting or guard controls, music, or parachute
-mechanics.
+open-wheel cars, rider-equipped bikes, and closed scenic circuits. You race eight
+rivals: steer, brake, drift, boost, jump the ramps, and ram rivals hard enough for a
+takedown. The game has no music.
 
 ## Run the game
 
@@ -15,16 +14,41 @@ npm install
 npm run dev
 ```
 
-Open the local address Vite prints. Use **WASD** or the arrow keys to drive,
-hold **Shift** to spend nitro, hold **Space** while steering to drift, and **Esc**
-to pause. Clean driving and clean drifts refill nitro; blue track pickups add
-30%. Engine and event sounds start after the first control input. The game has
-no music.
+Open the local address Vite prints.
 
-Choose **Story Mode** for eight saved chapters across the Blender circuits.
-Meet each chapter's finish target to unlock the next one; credits from races
-can be spent on power, grip, and durability upgrades. **Quick Race** keeps all
-routes available.
+## Controls
+
+| Action | Keyboard | Gamepad | Touch |
+| --- | --- | --- | --- |
+| Accelerate | W or Up | Right trigger | GAS |
+| Brake, then reverse | S or Down | Left trigger | BRAKE |
+| Steer | A / D or Left / Right | Left stick or d-pad | Arrow buttons |
+| Nitro | Shift | A | NITRO |
+| Drift (while steering) | Space | X or right bumper | DRIFT |
+| Reset to the track | R | Y | RESET |
+| Pause | Esc | Start | Pause button |
+
+Keys can be rebound under **Settings**, which also holds the volume, the graphics
+quality (low, medium, high) and whether the touch buttons are shown.
+
+Clean driving and clean drifts refill nitro; blue track canisters add 35% and a
+takedown adds 30%. Road coins collected on track buy per-vehicle upgrades (top
+speed, acceleration, handling, nitro, armour) in the garage. Engine and event
+sounds start after the first control input.
+
+Choose **Story Mode** for eight saved chapters across the circuits. Meet each
+chapter's finish target to unlock the next one. **Quick Race** keeps all routes
+available.
+
+## Tests
+
+```sh
+npm test
+```
+
+Runs the headless physics checks in `tools/sim/`: asset dimensions, vehicle
+dynamics, flip recovery, every ramp jump, and a crash fuzz test. `npm run lint`
+checks the source.
 
 ## Blender vehicle assets
 

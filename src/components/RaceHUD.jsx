@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { keyLabel } from '../state/settings';
 import './RaceHUD.css';
 
 function formatGap(gap) {
@@ -39,7 +40,9 @@ function NitroBar({ value, active }) {
     );
 }
 
-function RaceHUD({ hud, vehicle, eventLabel, eventTitle, minimapPath, onPause }) {
+const HINTS = [['accelerate', 'ACCEL'], ['brake', 'BRAKE / REVERSE'], ['left', 'LEFT'], ['right', 'RIGHT'], ['boost', 'NITRO'], ['drift', 'DRIFT'], ['reset', 'RESET']];
+
+function RaceHUD({ hud, vehicle, eventLabel, eventTitle, minimapPath, keys, showKeys = true, onPause }) {
     const rows = hud.leaderboard || [];
     const playerIndex = rows.findIndex((row) => row.isPlayer);
     const visible = rows.slice(0, 5);
@@ -93,10 +96,11 @@ function RaceHUD({ hud, vehicle, eventLabel, eventTitle, minimapPath, onPause })
                 <div className="hud-condition"><span>CONDITION</span><i><em style={{ width: `${100 - hud.damage}%` }} className={hud.damage > 65 ? 'low' : ''} /></i><b>{100 - hud.damage}%</b></div>
             </div>
 
-            <div className="race-controls-hint">
-                <kbd>W</kbd><span>ACCEL</span><kbd>S</kbd><span>BRAKE / REVERSE</span><kbd>A</kbd><kbd>D</kbd><span>STEER</span>
-                <kbd>SHIFT</kbd><span>NITRO</span><kbd>SPACE</kbd><span>DRIFT</span><kbd>R</kbd><span>RESET</span>
-            </div>
+            {showKeys && (
+                <div className="race-controls-hint">
+                    {HINTS.map(([action, label]) => <span key={action} className="hint"><kbd>{keyLabel(keys[action][0])}</kbd><span>{label}</span></span>)}
+                </div>
+            )}
 
             <div className={`hud-dash ${speedClass}`}>
                 <div className="hud-speed"><strong>{hud.speed}</strong><span>KM/H</span><em className="hud-gear">{hud.gear}</em></div>
