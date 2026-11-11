@@ -74,6 +74,7 @@ export default function App() {
     const appShellRef = useRef(null);
     const gameHostRef = useRef(null);
     const gameRef = useRef(null);
+    const heldKeysRef = useRef(new Set());
 
     const vehicle = useMemo(() => ROAD_VEHICLES.find((item) => item.id === vehicleId) || ROAD_VEHICLES[0], [vehicleId]);
     const track = useMemo(() => ROAD_TRACKS.find((item) => item.id === trackId) || ROAD_TRACKS[0], [trackId]);
@@ -203,7 +204,15 @@ export default function App() {
     }, [screen, racePhase, countdown]);
 
     useEffect(() => {
-        if (screen !== 'race' || racePhase !== 'running') return undefined;
+        // Keys are tracked through loading, the countdown and the pause menu as well, so a key
+        // that is already held when the race (re)starts takes effect without being pressed again.
+        const held = heldKeysRef.current;
+        if (screen !== 'race' || !['loading', 'countdown', 'running', 'paused'].includes(racePhase)) {
+            held.clear();
+            return undefined;
+        }
+        const running = racePhase === 'running';
+        if (running) held.forEach((name) => gameRef.current?.setInput(name, true));
         const keyNames = {
             ArrowUp: 'accelerate', w: 'accelerate',
             ArrowDown: 'brake', s: 'brake',
@@ -218,21 +227,29 @@ export default function App() {
             }
             const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
             if (event.key.startsWith('Arrow') || event.key === ' ') event.preventDefault();
-            if (event.key === 'Escape') {
+            if (keyNames[key]) {
+                held.add(keyNames[key]);
+                if (running) gameRef.current?.setInput(keyNames[key], true);
+            } else if (!running) {
+                return;
+            } else if (event.key === 'Escape') {
                 event.preventDefault();
                 setRacePhase('paused');
                 gameRef.current?.setPaused(true);
             } else if (key === 'r') {
                 gameRef.current?.setInput('reset', true);
-            } else if (keyNames[key]) {
-                gameRef.current?.setInput(keyNames[key], true);
             }
         };
         const handleUp = (event) => {
             const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
-            if (keyNames[key]) gameRef.current?.setInput(keyNames[key], false);
+            if (!keyNames[key]) return;
+            held.delete(keyNames[key]);
+            if (running) gameRef.current?.setInput(keyNames[key], false);
         };
-        const handleBlur = () => ['accelerate', 'brake', 'left', 'right', 'boost', 'drift'].forEach((name) => gameRef.current?.setInput(name, false));
+        const handleBlur = () => {
+            held.clear();
+            ['accelerate', 'brake', 'left', 'right', 'boost', 'drift'].forEach((name) => gameRef.current?.setInput(name, false));
+        };
         window.addEventListener('keydown', handleDown);
         window.addEventListener('keyup', handleUp);
         window.addEventListener('blur', handleBlur);

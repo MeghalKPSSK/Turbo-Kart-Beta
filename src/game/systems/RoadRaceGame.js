@@ -72,6 +72,12 @@ function extractRoadGeometry(root) {
 }
 
 const PLAYER_GRID_SLOT = 6;
+// Barrel-roll visuals: roll axis, pivot height above the road (m) and scratch objects.
+const TRICK_AXIS = new THREE.Vector3(0, 0, 1);
+const TRICK_PIVOT_HEIGHT = 1.02;
+const TRICK_QUAT = new THREE.Quaternion();
+const TRICK_UP = new THREE.Vector3();
+const TRICK_UP2 = new THREE.Vector3();
 const NITRO_PICKUP_GAIN = 0.35;
 
 export class RoadRaceGame {
@@ -105,6 +111,7 @@ export class RoadRaceGame {
         this.finishOrder = [];
         this.input = { accelerate: false, brake: false, left: false, right: false, boost: false, drift: false };
         this.resetCooldown = 0;
+        this.stuckTime = 0;
         this.score = 0;
         this.coins = 0;
         this.takedowns = 0;
@@ -440,7 +447,7 @@ export class RoadRaceGame {
         this.banner.timer = Math.max(0, this.banner.timer - dt);
         this.damageFlash = Math.max(0, this.damageFlash - dt * 2.5);
         this.handleEvents(this.collisions.update(dt));
-        this.updateRecovery();
+        this.updateRecovery(dt);
         this.updatePickups();
         this.updateRaceState(dt);
         this.updatePlayerRewards(dt);
@@ -454,7 +461,7 @@ export class RoadRaceGame {
     }
 
     // ------------------------------------------------------------------------------ rules
-    updateRecovery() {
+    updateRecovery(dt) {
         for (const racer of this.racers) {
             const { vehicle, tracker } = racer;
             if (needsRecovery(vehicle)) {
@@ -465,7 +472,11 @@ export class RoadRaceGame {
             }
             const stranded = tracker.offRoadTime > 3 || vehicle.flippedTime > 2.2;
             if (racer.isPlayer) {
-                if (stranded || (this.started && vehicle.stillTime > 4.5 && !vehicle.hold && !this.finished && vehicle.mode === 'ok')) this.requestReset();
+                // Stuck means trying to drive and getting nowhere; a player who simply stops is left alone.
+                const pushing = vehicle.input.throttle > 0.1 || vehicle.input.brake > 0.1;
+                const stuck = this.started && !this.finished && pushing && vehicle.stillTime > 0 && !vehicle.hold && vehicle.mode === 'ok';
+                this.stuckTime = stuck ? this.stuckTime + dt : 0;
+                if (stranded || this.stuckTime > 3) { this.stuckTime = 0; this.requestReset(); }
             } else if (racer.driver.needsRespawn || stranded) {
                 racer.driver.needsRespawn = false;
                 placeOnRoad(this.model, vehicle, tracker.s + 6, 0, 18);
@@ -647,6 +658,9 @@ export class RoadRaceGame {
     updatePlayerRewards(dt) {
         const racer = this.player;
         const v = racer.vehicle;
+        // Consume the landing latch (see Vehicle.afterStep) so no landing is missed or counted twice.
+        const landed = v.landed;
+        v.landed = false;
         if (!this.started || this.finished) return;
         // Distance score and clean-driving nitro.
         this.score += Math.max(0, v.speed) * dt * 0.9;
@@ -669,7 +683,7 @@ export class RoadRaceGame {
         const air = v.airborne && v.airTime > 0.3;
         const steer = (this.input.left ? 1 : 0) - (this.input.right ? 1 : 0);
         if (air && steer !== 0) { this.trick.roll += steer * 7.2 * dt; this.trick.active = true; }
-        if (v.landed) {
+        if (landed) {
             const turns = Math.abs(this.trick.roll) / (Math.PI * 2);
             if (v.lastAirTime > 0.45) {
                 this.score += Math.round(v.lastAirTime * 220);
@@ -682,15 +696,15 @@ export class RoadRaceGame {
                     this.showToast(`AIR ${v.lastAirTime.toFixed(1)}s`, 'good', 1.1);
                 }
             }
-            this.trick.settle = true;
             this.audio.landing(v.landingImpact / 8);
             this.cameraRig.addShake(Math.min(0.7, v.landingImpact / 14));
             this.dust(v, Math.min(1, v.landingImpact / 9));
         }
-        if (!air && this.trick.settle) {
+        // Back on the ground (landed, reset or recovered in mid-air): finish the roll upright.
+        if (!v.airborne && this.trick.roll !== 0) {
             const target = Math.round(this.trick.roll / (Math.PI * 2)) * Math.PI * 2;
             this.trick.roll += (target - this.trick.roll) * Math.min(1, dt * 18);
-            if (Math.abs(target - this.trick.roll) < 0.01) { this.trick.roll = 0; this.trick.settle = false; this.trick.active = false; }
+            if (Math.abs(target - this.trick.roll) < 0.01) { this.trick.roll = 0; this.trick.active = false; }
         }
     }
 
@@ -740,7 +754,12 @@ export class RoadRaceGame {
             visual.root.position.copy(racer.pos);
             visual.root.quaternion.copy(racer.quat);
             if (racer.isPlayer && this.trick.roll !== 0) {
-                visual.root.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), this.trick.roll));
+                // Barrel roll about the middle of the vehicle. Rolling about its origin, which
+                // sits at road level, would swing the whole model down through the road.
+                const before = TRICK_UP.set(0, 1, 0).applyQuaternion(visual.root.quaternion);
+                visual.root.quaternion.multiply(TRICK_QUAT.setFromAxisAngle(TRICK_AXIS, this.trick.roll));
+                const after = TRICK_UP2.set(0, 1, 0).applyQuaternion(visual.root.quaternion);
+                visual.root.position.addScaledVector(before.sub(after), TRICK_PIVOT_HEIGHT);
             }
             updateVehicleVisual(visual, vehicle, dt || 0.016);
             // Ghost cars (just respawned) blink so they read as intangible.

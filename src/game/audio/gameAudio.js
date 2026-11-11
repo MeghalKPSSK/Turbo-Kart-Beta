@@ -108,7 +108,8 @@ export class GameAudio {
     }
 
     tone(frequency, duration, type = 'sine', end = frequency, volume = 0.2, attack = 0.012) {
-        if (!this.context) return;
+        // An exponential ramp to (near) zero throws, and a sound that quiet is inaudible anyway.
+        if (!this.context || !(volume > 0.0001)) return;
         const ctx = this.context;
         const t = ctx.currentTime;
         const osc = ctx.createOscillator();
@@ -124,7 +125,7 @@ export class GameAudio {
     }
 
     noiseBurst(duration, frequency, volume, q = 1, type = 'bandpass') {
-        if (!this.context) return;
+        if (!this.context || !(volume > 0.0001)) return;
         const ctx = this.context;
         const t = ctx.currentTime;
         const source = ctx.createBufferSource();

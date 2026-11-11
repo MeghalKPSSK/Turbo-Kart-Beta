@@ -128,6 +128,8 @@ export class Vehicle {
             steer: 0,
             slip: 0,
             hitPoint: { x: 0, y: 0, z: 0 },
+            // Result of this step's ground probe (see beforeStep).
+            probe: { x: 0, y: 0, z: 0, toi: -1, nx: 0, ny: 1, nz: 0, slopeRate: 0 },
             normal: { x: 0, y: 1, z: 0 },
             vLong: 0,
             sliding: 0
@@ -376,26 +378,60 @@ export class Vehicle {
         let nx = 0, ny = 0, nz = 0;
         const mount = this._tmp.a;
         const contact = this._tmp.b;
+        // Pass 1: find the road under every wheel, and how fast the road itself is coming up
+        // to meet it. On a ramp or a rise the surface closes on the wheel even though the
+        // chassis is not moving "down", and a damper that only looks at chassis speed never
+        // sees it: the car ploughs into the slope and the body sinks into the road.
         for (const wheel of wheels) {
             const def = wheel.def;
             rotate(q, def.mount.x, def.mount.y, def.mount.z, mount);
-            mount.x += this.position.x; mount.y += this.position.y; mount.z += this.position.z;
-            const reach = suspension.maxLength + def.radius;
-            const hit = this.physics.probe(mount.x, mount.y, mount.z, -up.x, -up.y, -up.z, reach, body);
-            if (!hit || hit.ny < 0.25) {
+            const probe = wheel.probe;
+            probe.x = mount.x + this.position.x; probe.y = mount.y + this.position.y; probe.z = mount.z + this.position.z;
+            probe.toi = -1;
+            probe.slopeRate = 0;
+            const hit = this.physics.probe(probe.x, probe.y, probe.z, -up.x, -up.y, -up.z, suspension.maxLength + def.radius, body);
+            if (!hit || hit.ny < 0.25) continue;
+            probe.toi = hit.toi;
+            probe.nx = hit.nx; probe.ny = hit.ny; probe.nz = hit.nz;
+            // Only surfaces the wheel can roll onto count. Against a steep face (the side of a
+            // kicker, a kerb edge) the same sum would turn forward speed into a huge upward shove.
+            const facing = hit.nx * up.x + hit.ny * up.y + hit.nz * up.z;
+            const trust = clamp((facing - 0.8) / 0.12, 0, 1);
+            if (trust > 0) {
+                contact.x = probe.x - up.x * hit.toi; contact.y = probe.y - up.y * hit.toi; contact.z = probe.z - up.z * hit.toi;
+                const vc = body.velocityAtPoint(contact);
+                const chassisRate = -(vc.x * up.x + vc.y * up.y + vc.z * up.z);
+                const surfaceRate = -(vc.x * hit.nx + vc.y * hit.ny + vc.z * hit.nz) / facing;
+                probe.slopeRate = (surfaceRate - chassisRate) * trust;
+            }
+        }
+
+        // Pass 2: spring and damper forces.
+        for (let index = 0; index < wheels.length; index += 1) {
+            const wheel = wheels[index];
+            const def = wheel.def;
+            const probe = wheel.probe;
+            if (probe.toi < 0) {
                 wheel.grounded = false;
                 wheel.load = 0;
                 wheel.springLength += (suspension.maxLength - wheel.springLength) * Math.min(1, dt * 9);
                 wheel.compression = suspension.restLength - wheel.springLength;
                 continue;
             }
-            const distance = hit.toi;
+            const distance = probe.toi;
             const springLength = Math.max(0.02, distance - def.radius);
-            contact.x = mount.x - up.x * distance;
-            contact.y = mount.y - up.y * distance;
-            contact.z = mount.z - up.z * distance;
+            contact.x = probe.x - up.x * distance;
+            contact.y = probe.y - up.y * distance;
+            contact.z = probe.z - up.z * distance;
             const vc = body.velocityAtPoint(contact);
-            const compressRate = -(vc.x * up.x + vc.y * up.y + vc.z * up.z);
+            // The rising-road term is shared across an axle (the smaller of the two sides), so a
+            // slope both wheels are climbing is damped properly while a kicker under one side
+            // only does not lever the car over.
+            const other = (wheels[index ^ 1] || wheel).probe;
+            const mine = probe.slopeRate;
+            const theirs = other.toi < 0 ? 0 : other.slopeRate;
+            const slopeRate = mine * theirs > 0 ? Math.sign(mine) * Math.min(Math.abs(mine), Math.abs(theirs)) : 0;
+            const compressRate = -(vc.x * up.x + vc.y * up.y + vc.z * up.z) + slopeRate;
             const compression = suspension.restLength - springLength;
             let damping = suspension.damping;
             if (compressRate > 1.8) damping *= 1 + Math.min(4, (compressRate - 1.8) / 1.8);
@@ -409,7 +445,7 @@ export class Vehicle {
             wheel.compression = compression;
             wheel.load = force;
             wheel.hitPoint.x = contact.x; wheel.hitPoint.y = contact.y; wheel.hitPoint.z = contact.z;
-            wheel.normal.x = hit.nx; wheel.normal.y = hit.ny; wheel.normal.z = hit.nz;
+            wheel.normal.x = probe.nx; wheel.normal.y = probe.ny; wheel.normal.z = probe.nz;
             wheel.vel = vc;
             if (force > 0) {
                 body.applyImpulseAtPoint({ x: up.x * force * dt, y: up.y * force * dt, z: up.z * force * dt }, contact, true);
@@ -417,7 +453,7 @@ export class Vehicle {
             grounded += 1;
             totalLoad += force;
             if (def.driven) drivenLoad += force;
-            nx += hit.nx; ny += hit.ny; nz += hit.nz;
+            nx += probe.nx; ny += probe.ny; nz += probe.nz;
             const height = contact.y;
             if (height < minHeight) minHeight = height;
             if (height > maxHeight) maxHeight = height;
@@ -694,7 +730,8 @@ export class Vehicle {
         // Air time and landing detection.
         const wasAirborne = this.airborne;
         this.airborne = this.groundedCount === 0;
-        this.landed = false;
+        // `landed` is a latch: it stays set until whoever reads it clears it, because the game
+        // looks once per rendered frame and a frame spans several physics steps.
         if (this.airborne) {
             this.airTime += dt;
         } else {
