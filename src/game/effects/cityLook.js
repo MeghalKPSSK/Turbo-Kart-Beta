@@ -190,7 +190,7 @@ async function buildMaterials(anisotropy) {
     marking.polygonOffsetUnits = -2;
     const checker = (color) => Object.assign(plain(color, 0.7), { polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
     const pool = new THREE.MeshBasicMaterial({
-        map: poolTexture(), transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false,
+        map: poolTexture(), transparent: true, opacity: 0.13, blending: THREE.AdditiveBlending, depthWrite: false,
         polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, fog: true
     });
     return {

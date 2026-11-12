@@ -42,6 +42,15 @@ FACADES = ("Brick", "Concrete", "Plaster", "Glass")
 
 # id -> corner points of the street grid loop (x, z) and its park stretches.
 # A park is (edge index, side): +1 is the left of the direction of travel.
+#
+# Optional district character:
+#   radius    corner radius in metres (default CORNER_RADIUS)
+#   hills     how strongly the ground rises and falls (1 = downtown)
+#   floors    (share, lowest, highest) building height bands, in storeys
+#   facades   wall types to pick from, repeated names are picked more often
+#   lot       (narrowest, widest) building frontage in metres
+#   tree_gap  metres between street trees (0 for none)
+#   towers    number of far skyline towers
 CITY_ROUTES = {
     "downtown_circuit": {
         "corners": [(-180, -120), (180, -120), (180, 20), (60, 20), (60, 130), (-180, 130)],
@@ -49,12 +58,49 @@ CITY_ROUTES = {
         "parks": [(4, 1), (2, 1), (5, -1)],
         "seed": 11,
     },
+    "harbour_docks": {
+        "corners": [(-220, -60), (220, -60), (260, 40), (120, 110), (-40, 70), (-220, 110)],
+        "start_edge": 0,
+        "parks": [(0, -1)],
+        "seed": 23, "hills": 0.25, "floors": [(0.7, 2, 4), (0.3, 5, 8)],
+        "facades": ["Concrete", "Concrete", "Brick"], "lot": (30, 52), "tree_gap": 60, "towers": 18,
+    },
+    "hillside_suburbs": {
+        "corners": [(-210, -90), (-40, -150), (120, -80), (230, -130), (250, 40), (90, 110), (-60, 60), (-200, 130)],
+        "start_edge": 0,
+        "parks": [(2, 1), (5, -1), (7, 1)],
+        "seed": 37, "hills": 2.6, "floors": [(0.8, 2, 3), (0.2, 4, 5)],
+        "facades": ["Plaster", "Plaster", "Brick"], "lot": (14, 22), "tree_gap": 13, "towers": 0,
+    },
+    "industrial_zone": {
+        "corners": [(-200, -110), (200, -110), (200, 110), (40, 110), (40, 10), (-80, 10), (-80, 110), (-200, 110)],
+        "start_edge": 0,
+        "parks": [],
+        "seed": 41, "hills": 0.4, "floors": [(0.75, 2, 4), (0.25, 5, 9)],
+        "facades": ["Brick", "Concrete", "Brick"], "lot": (34, 60), "tree_gap": 0, "towers": 12,
+    },
+    "park_boulevard": {
+        "corners": [(-240, -80), (0, -140), (240, -80), (240, 90), (0, 150), (-240, 90)],
+        "start_edge": 0,
+        "parks": [(0, 1), (1, 1), (3, 1), (4, 1), (2, -1), (5, -1)],
+        "seed": 53, "radius": 70.0, "hills": 1.6, "floors": [(0.6, 4, 7), (0.4, 8, 12)],
+        "facades": ["Plaster", "Brick", "Glass"], "tree_gap": 15, "towers": 20,
+    },
+    "highway_ring": {
+        "corners": [(-380, -160), (380, -160), (460, 0), (380, 160), (-380, 160), (-460, 0)],
+        "start_edge": 0,
+        "parks": [(3, -1)],
+        "seed": 67, "radius": 90.0, "hills": 0.8, "floors": [(0.35, 6, 10), (0.4, 12, 20), (0.25, 22, 38)],
+        "facades": ["Glass", "Glass", "Concrete"], "lot": (26, 44), "tree_gap": 34, "towers": 60,
+    },
 }
+
+HILLS = 1.0
 
 
 def ground_height(x, z):
     """Gentle, smooth rise and fall so the streets are not dead flat."""
-    return 3.0 + 0.010 * x + 1.2 * math.sin(z / 70.0) + 0.8 * math.sin(x / 55.0)
+    return 3.0 + HILLS * (0.010 * x + 1.2 * math.sin(z / 70.0) + 0.8 * math.sin(x / 55.0))
 
 
 # --------------------------------------------------------------------------- #
@@ -247,8 +293,10 @@ def in_ranges(index, ranges):
 
 
 def build_city(track_id, spec):
+    global HILLS
+    HILLS = spec.get("hills", 1.0)
     rng = random.Random(spec["seed"])
-    points, edges = filleted_loop(spec["corners"], spec["start_edge"])
+    points, edges = filleted_loop(spec["corners"], spec["start_edge"], spec.get("radius", CORNER_RADIUS))
     route = layout.Route(points)
     street = Street(points)
     mesh = CityMesh(track_id)
@@ -373,16 +421,23 @@ def build_city(track_id, spec):
         placed.append((centre, reach))
         return True
 
+    bands = spec.get("floors", [(0.5, 4, 8), (0.35, 9, 16), (0.15, 18, 30)])
+    wall_types = spec.get("facades", FACADES)
+    lot_range = spec.get("lot", (20, 36))
+
     def lot_height():
         roll = rng.random()
-        floors = rng.randint(4, 8) if roll < 0.5 else rng.randint(9, 16) if roll < 0.85 else rng.randint(18, 30)
-        return floors * 3.3
+        for share, lowest, highest in bands:
+            if roll < share:
+                return rng.randint(lowest, highest) * 3.3
+            roll -= share
+        return bands[-1][2] * 3.3
 
     for side in (1, -1):
         for row, setback in enumerate((26.0, 60.0)):
             index = rng.randint(0, 6)
             while index < count:
-                width = rng.uniform(20, 36)
+                width = rng.uniform(*lot_range)
                 depth = rng.uniform(18, 28)
                 span = max(2, round(width / SAMPLE_STEP))
                 middle = index + span // 2
@@ -390,14 +445,16 @@ def build_city(track_id, spec):
                     if not (row and in_ranges(middle % count, [(a - 8, b + 8) for a, b in parks[side]]) and setback < 80):
                         centre = street.at(middle, side * (setback + depth / 2))
                         try_building((centre[0], centre[1]), street.tangent[middle % count], width, depth,
-                                     lot_height() * (1.25 if row else 1.0), rng.choice(FACADES))
+                                     lot_height() * (1.25 if row else 1.0), rng.choice(wall_types))
                 index += span + rng.randint(1, 3)
 
     # A far ring of towers gives the skyline depth beyond the blocks you race through.
     cx, cz = sum(xs) / len(xs), sum(zs) / len(zs)
-    for step in range(46):
-        angle = math.tau * step / 46 + rng.uniform(-0.05, 0.05)
-        distance = rng.uniform(330, 470)
+    towers = spec.get("towers", 46)
+    span = max(max(xs) - min(xs), max(zs) - min(zs)) / 2
+    for step in range(towers):
+        angle = math.tau * step / towers + rng.uniform(-0.05, 0.05)
+        distance = span + rng.uniform(150, 290)
         centre = (cx + math.cos(angle) * distance, cz + math.sin(angle) * distance)
         if route.clearance(*centre) < 150:
             continue
@@ -412,8 +469,9 @@ def build_city(track_id, spec):
         trees.append({"position": [round(x, 2), round(ground_height(x, z) + 0.05, 2), round(z, 2)],
                       "scale": round(scale, 2), "yaw": round(rng.uniform(0, math.tau), 3)})
 
-    tree_gap = max(1, round(21.0 / SAMPLE_STEP))
-    for index in range(4, count, tree_gap):
+    tree_metres = spec.get("tree_gap", 21.0)
+    tree_gap = max(1, round(tree_metres / SAMPLE_STEP)) if tree_metres else count
+    for index in range(4, count if tree_metres else 0, tree_gap):
         for side in (1, -1):
             if in_ranges(index, parks[side]):
                 continue

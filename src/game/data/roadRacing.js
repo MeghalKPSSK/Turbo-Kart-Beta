@@ -150,6 +150,66 @@ export const ROAD_TRACKS = [
         sky: '#7f8ea3'
     },
     {
+        id: 'harbour_docks',
+        name: 'Saltgate Docks',
+        region: 'Meridian City',
+        biome: 'HARBOUR FRONT',
+        grade: 'NOVICE',
+        description: 'A long quayside straight past the warehouses, then a sweep back through the yards.',
+        laps: 3,
+        jumpProgress: [],
+        tone: '#6fb6c9',
+        sky: '#7f8ea3'
+    },
+    {
+        id: 'hillside_suburbs',
+        name: 'Larkhill Rise',
+        region: 'Meridian City',
+        biome: 'HILLSIDE SUBURBS',
+        grade: 'ADVANCED',
+        description: 'Eight corners over rolling hills between low houses and tree-lined streets.',
+        laps: 3,
+        jumpProgress: [],
+        tone: '#9bc46a',
+        sky: '#7f8ea3'
+    },
+    {
+        id: 'industrial_zone',
+        name: 'Foundry Row',
+        region: 'Meridian City',
+        biome: 'INDUSTRIAL ZONE',
+        grade: 'INTERMEDIATE',
+        description: 'Square corners between the factories, with a tight dog-leg through the loading yards.',
+        laps: 3,
+        jumpProgress: [],
+        tone: '#d97a4a',
+        sky: '#7f8ea3'
+    },
+    {
+        id: 'park_boulevard',
+        name: 'Elmwood Boulevard',
+        region: 'Meridian City',
+        biome: 'PARK BOULEVARD',
+        grade: 'NOVICE',
+        description: 'Wide, flowing bends through the city park, under trees almost all the way round.',
+        laps: 3,
+        jumpProgress: [],
+        tone: '#7fcf8f',
+        sky: '#7f8ea3'
+    },
+    {
+        id: 'highway_ring',
+        name: 'Orbital Ring',
+        region: 'Meridian City',
+        biome: 'HIGHWAY RING',
+        grade: 'EXPERT',
+        description: 'Two kilometres of flat-out ring road beneath the glass towers. Top speed decides it.',
+        laps: 2,
+        jumpProgress: [],
+        tone: '#8aa4ff',
+        sky: '#7f8ea3'
+    },
+    {
         id: 'rovers_rift',
         name: 'Highpoint Switchbacks',
         region: 'Kestrel Highlands',
