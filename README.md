@@ -85,6 +85,23 @@ command shown at the top of the corresponding generator file, replacing
 `/path/to` with this project's absolute path. Then restart or refresh Vite so
 it serves the updated files.
 
+## City routes
+
+The city street routes are built differently from the scenic circuits. Blender
+exports geometry, UVs and named materials only
+(`tools/blender/build_city_tracks.py`); the game adds photographic surface
+textures, a real dusk sky, lit windows, street-lamp glow and instanced scanned
+trees when the route loads (`src/game/effects/cityLook.js`).
+
+The textures, sky and tree come from [Poly Haven](https://polyhaven.com) and are
+CC0. To fetch and rebuild them:
+
+```sh
+python3 tools/assets/fetch_polyhaven.py
+/Applications/Blender.app/Contents/MacOS/Blender -b --python tools/blender/build_city_assets.py
+/Applications/Blender.app/Contents/MacOS/Blender -b --python tools/blender/build_city_tracks.py
+```
+
 ## Production build
 
 ```sh

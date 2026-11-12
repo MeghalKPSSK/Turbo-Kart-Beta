@@ -29,9 +29,9 @@ export const DEFAULT_KEYS = {
 
 // What each graphics level costs the renderer.
 export const QUALITY_LEVELS = {
-    low: { label: 'Low', detail: 'No shadows, lower resolution. For phones and older laptops.', pixelRatio: 1, antialias: false, shadows: 0, particles: 0.5 },
-    medium: { label: 'Medium', detail: 'Soft shadows at a moderate resolution.', pixelRatio: 1.5, antialias: true, shadows: 1024, particles: 0.8 },
-    high: { label: 'High', detail: 'Sharp shadows and full resolution.', pixelRatio: 1.75, antialias: true, shadows: 2048, particles: 1 }
+    low: { label: 'Low', detail: 'No shadows, lower resolution. For phones and older laptops.', pixelRatio: 1, antialias: false, shadows: 0, particles: 0.5, bloom: false },
+    medium: { label: 'Medium', detail: 'Soft shadows at a moderate resolution.', pixelRatio: 1.5, antialias: true, shadows: 1024, particles: 0.8, bloom: true },
+    high: { label: 'High', detail: 'Sharp shadows and full resolution.', pixelRatio: 1.75, antialias: true, shadows: 2048, particles: 1, bloom: true }
 };
 
 export const TOUCH_MODES = {

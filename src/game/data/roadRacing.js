@@ -138,6 +138,18 @@ export const ROAD_VEHICLES = [
 
 export const ROAD_TRACKS = [
     {
+        id: 'downtown_circuit',
+        name: 'Meridian Downtown',
+        region: 'Meridian City',
+        biome: 'DOWNTOWN GRID',
+        grade: 'INTERMEDIATE',
+        description: 'Six hard corners through the downtown blocks at dusk, with a park run under the trees.',
+        laps: 3,
+        jumpProgress: [],
+        tone: '#f2a65a',
+        sky: '#7f8ea3'
+    },
+    {
         id: 'rovers_rift',
         name: 'Highpoint Switchbacks',
         region: 'Kestrel Highlands',

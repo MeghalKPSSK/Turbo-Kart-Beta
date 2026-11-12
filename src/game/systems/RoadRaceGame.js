@@ -17,6 +17,7 @@ import { ParticlePool } from '../effects/particles.js';
 import { NitroEffect, glowTexture } from '../effects/nitroFx.js';
 import { SkidMarks } from '../effects/skidMarks.js';
 import { GameAudio } from '../audio/gameAudio.js';
+import { createCityLook } from '../effects/cityLook.js';
 
 const loader = new GLTFLoader();
 const modelBase = `${import.meta.env.BASE_URL || '/'}models/blender/`;
@@ -76,6 +77,7 @@ function extractRoadGeometry(root) {
 
 const PLAYER_GRID_SLOT = 6;
 // Barrel-roll visuals: roll axis, pivot height above the road (m) and scratch objects.
+const DAY_SUN_OFFSET = new THREE.Vector3(-110, 180, 70);
 const TRICK_AXIS = new THREE.Vector3(0, 0, 1);
 const TRICK_PIVOT_HEIGHT = 1.02;
 const TRICK_QUAT = new THREE.Quaternion();
@@ -180,6 +182,14 @@ export class RoadRaceGame {
             }
         });
         this.scene.add(this.trackScene);
+        // City routes get their textures, sky and trees at load time (see cityLook.js).
+        if (meta.theme === 'city') {
+            this.look = await createCityLook({
+                renderer: this.renderer, scene: this.scene, camera: this.camera, trackScene: this.trackScene,
+                meta, quality: this.quality, sun: this.sun, hemisphere: this.hemisphere, fill: this.fill
+            });
+            if (this.disposed) { this.look.dispose(); return; }
+        }
 
         this.glow = glowTexture();
         this.particles = new ParticlePool(this.scene, { max: Math.round(1600 * this.quality.particles), additive: true });
@@ -241,7 +251,8 @@ export class RoadRaceGame {
         this.scene.environment = this.environment;
         this.scene.environmentIntensity = 0.24;
         this.camera = new THREE.PerspectiveCamera(64, width / height, 0.1, 1900);
-        this.scene.add(new THREE.HemisphereLight(0xd8e8f3, 0x45483e, 1.8));
+        this.hemisphere = new THREE.HemisphereLight(0xd8e8f3, 0x45483e, 1.8);
+        this.scene.add(this.hemisphere);
         this.sun = new THREE.DirectionalLight(0xffe1c2, 3.1);
         this.sun.castShadow = this.quality.shadows > 0;
         this.sun.shadow.mapSize.set(this.quality.shadows || 512, this.quality.shadows || 512);
@@ -250,9 +261,9 @@ export class RoadRaceGame {
         this.sun.shadow.bias = -0.0004;
         this.sun.shadow.normalBias = 0.05;
         this.scene.add(this.sun, this.sun.target);
-        const fill = new THREE.DirectionalLight(0x9bc8ea, 0.62);
-        fill.position.set(120, 58, -130);
-        this.scene.add(fill);
+        this.fill = new THREE.DirectionalLight(0x9bc8ea, 0.62);
+        this.fill.position.set(120, 58, -130);
+        this.scene.add(this.fill);
     }
 
     createRacers() {
@@ -408,8 +419,13 @@ export class RoadRaceGame {
         const delta = Math.min(MAX_FRAME_TIME, Math.max(0, (now - this.lastFrame) / 1000));
         this.lastFrame = now;
         this.tick(delta);
-        this.renderer.render(this.scene, this.camera);
+        this.draw();
         this.animationFrame = requestAnimationFrame(this.frame);
+    }
+
+    draw() {
+        if (this.look) this.look.render();
+        else this.renderer.render(this.scene, this.camera);
     }
 
     tick(delta) {
@@ -433,7 +449,7 @@ export class RoadRaceGame {
     // browser tabs throttle to about 1 fps.
     advance(seconds, { render = true, frameDt = 1 / 60 } = {}) {
         for (let t = 0; t < seconds - 1e-9; t += frameDt) this.tick(frameDt);
-        if (render) this.renderer.render(this.scene, this.camera);
+        if (render) this.draw();
     }
 
     fixedStep() {
@@ -795,11 +811,13 @@ export class RoadRaceGame {
         }
         const p = this.player;
         const sun = this.sun;
-        sun.position.set(p.pos.x - 110, p.pos.y + 180, p.pos.z + 70);
+        const sunOffset = this.look?.sunOffset || DAY_SUN_OFFSET;
+        sun.position.set(p.pos.x + sunOffset.x, p.pos.y + sunOffset.y, p.pos.z + sunOffset.z);
         sun.target.position.copy(p.pos);
         const speedRatio = Math.min(1, p.vehicle.speedAbs / (p.spec.engine.topSpeed * 1.2));
         const nitro = p.nitroFx.intensity;
         this.cameraRig.update(dt || 0.016, p.vehicle, p.pos, { nitro, speedRatio });
+        this.look?.update();
         if (dt > 0) {
             this.particles.update(dt, this.camera, this.renderer.domElement.clientHeight);
             this.smoke.update(dt, this.camera, this.renderer.domElement.clientHeight);
@@ -897,6 +915,7 @@ export class RoadRaceGame {
         this.renderer.setSize(width, height);
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
+        this.look?.resize(width, height);
     }
 
     // Snapshot used by the automated play-tests.
@@ -935,6 +954,7 @@ export class RoadRaceGame {
         safely('smoke', () => this.smoke?.dispose());
         safely('skid marks', () => this.skids?.dispose());
         safely('glow texture', () => this.glow?.dispose());
+        safely('city look', () => this.look?.dispose());
         safely('physics', () => this.physics?.dispose());
         safely('environment', () => this.environment?.dispose());
         safely('renderer', () => {

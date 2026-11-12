@@ -41,7 +41,8 @@ const flameFragment = `
     uniform vec3 uCore; uniform vec3 uEdge; uniform float uIntensity; uniform float uOpacity;
     varying float vT; varying float vFlick;
     void main() {
-        float fade = pow(1.0 - vT, 1.25);
+        // max(): pow() of a negative base is undefined and would write NaN, which bloom smears into a black square.
+        float fade = pow(max(0.0, 1.0 - vT), 1.25);
         vec3 color = mix(uCore, uEdge, smoothstep(0.0, 0.8, vT));
         float alpha = fade * uOpacity * uIntensity * (0.8 + 0.2 * vFlick);
         gl_FragColor = vec4(color * (1.2 + 0.8 * fade), alpha);
@@ -131,7 +132,7 @@ class RibbonTrail {
             side.crossVectors(dir, toCamera);
             if (side.lengthSq() < 1e-8) side.set(1, 0, 0);
             side.normalize();
-            const life = i < n ? this.ages[k] / this.maxAge : 1;
+            const life = i < n ? Math.min(1, Math.max(0, this.ages[k] / this.maxAge)) : 1;
             const taper = Math.pow(1 - life, 0.7) * (i === 0 ? 0.35 : 1);
             const halfWidth = this.width * taper * (0.45 + 0.55 * this.strength);
             const a = i * 2;

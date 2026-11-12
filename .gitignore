@@ -28,3 +28,6 @@ dist-ssr
 __pycache__/
 *.pyc
 *.blend1
+
+# Raw downloaded source assets (see tools/assets/fetch_polyhaven.py)
+assets/polyhaven/
