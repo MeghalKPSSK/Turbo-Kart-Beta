@@ -32,13 +32,26 @@ Keys can be rebound under **Settings**, which also holds the volume, the graphic
 quality (low, medium, high) and whether the touch buttons are shown.
 
 Clean driving and clean drifts refill nitro; blue track canisters add 35% and a
-takedown adds 30%. Road coins collected on track buy per-vehicle upgrades (top
-speed, acceleration, handling, nitro, armour) in the garage. Engine and event
-sounds start after the first control input.
+takedown adds 30%. Engine and event sounds start after the first control input.
 
-Choose **Story Mode** for eight saved chapters across the circuits. Meet each
-chapter's finish target to unlock the next one. **Quick Race** keeps all routes
-available.
+## Modes
+
+- **Career:** five tiers (Street, Club, Pro, Elite, Legend), each run by a rival
+  crew, with six events per tier. Events award up to three stars; stars open
+  the next tier. The last event of each tier is a duel against the crew boss,
+  and winning it puts the boss's machine in your garage.
+- **Event types:** circuit race, time trial, elimination, drift score, takedown
+  hunt, boss duel, and police pursuit in the top two tiers.
+- **Tournaments:** four cups of three to five rounds, scored on points, with
+  prize money for the top three.
+- **Quick Race:** any route, any owned vehicle.
+
+Credits are the only currency. Races, new stars and cups pay them out; they buy
+vehicles and per-vehicle upgrades (top speed, acceleration, handling, nitro,
+armour) in the garage. Progress is saved in the browser.
+
+The career data and scoring rules live in `src/game/data/career.js`, and the
+save format in `src/state/profile.js`.
 
 ## Tests
 
@@ -46,8 +59,8 @@ available.
 npm test
 ```
 
-Runs the headless physics checks in `tools/sim/`: asset dimensions, vehicle
-dynamics, flip recovery, every ramp jump, and a crash fuzz test. `npm run lint`
+Runs the headless checks in `tools/sim/`: career rules and scoring, asset
+dimensions, vehicle dynamics, flip recovery, every ramp jump, and a crash fuzz test. `npm run lint`
 checks the source.
 
 ## Blender vehicle assets

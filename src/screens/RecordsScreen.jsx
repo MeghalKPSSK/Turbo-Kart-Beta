@@ -1,5 +1,6 @@
 import { CreditChip, SetupHeader } from '../components/Chrome';
 import { formatTime, ordinal } from '../utils/format';
+import { CAREER_TIERS, CUPS, driverLevel, totalStars } from '../game/data/career';
 
 export default function RecordsScreen({ profile, onBack, onRace }) {
     return (
@@ -11,7 +12,10 @@ export default function RecordsScreen({ profile, onBack, onRace }) {
                 <div><span>BEST FINISH</span><b>{profile.races ? ordinal(profile.bestFinish) : '—'}</b></div>
                 <div><span>FASTEST FINISH</span><b>{formatTime(profile.bestTime)}</b></div>
                 <div><span>CAREER POINTS</span><b>{(profile.totalPoints || 0).toLocaleString()}</b></div>
-                <div><span>ROAD COINS</span><b>{profile.roadCoins || 0}</b></div>
+                <div><span>CAREER STARS</span><b>{totalStars(profile.stars)} / {CAREER_TIERS.length * 18}</b></div>
+                <div><span>BOSSES BEATEN</span><b>{profile.bosses.length} / {CAREER_TIERS.length}</b></div>
+                <div><span>CUPS WON</span><b>{Object.values(profile.cups).filter((place) => place === 1).length} / {CUPS.length}</b></div>
+                <div><span>DRIVER LEVEL</span><b>{driverLevel(profile.xp).level}</b></div>
                 <div><span>BEST RACE SCORE</span><b>{(profile.bestScore || 0).toLocaleString()}</b></div>
                 <div><span>TAKEDOWNS</span><b>{profile.takedowns || 0}</b></div>
             </div>

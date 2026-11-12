@@ -17,7 +17,7 @@ function Minimap({ path, dots }) {
                 <polyline className="hud-minimap-line" points={`${points} ${points.split(' ')[0]}`} />
                 <circle className="hud-minimap-start" cx={path[0][0] * 100} cy={path[0][1] * 100} r="2.2" />
                 {dots?.filter((d) => !d.isPlayer).map((d, index) => (
-                    <circle key={index} className={`hud-dot rival ${d.wrecked ? 'wrecked' : ''}`} cx={d.pos[0] * 100} cy={d.pos[1] * 100} r="2.4" />
+                    <circle key={index} className={`hud-dot rival ${d.wrecked ? 'wrecked' : ''} ${d.police ? 'police' : ''}`} cx={d.pos[0] * 100} cy={d.pos[1] * 100} r="2.4" />
                 ))}
                 {dots?.filter((d) => d.isPlayer).map((d, index) => (
                     <circle key={`p${index}`} className="hud-dot player" cx={d.pos[0] * 100} cy={d.pos[1] * 100} r="3.6" />
@@ -57,12 +57,16 @@ function RaceHUD({ hud, vehicle, eventLabel, eventTitle, minimapPath, keys, show
 
             <header className="race-topline">
                 <div className="race-event-label"><span>{eventLabel}</span><b>{eventTitle}</b></div>
-                <div className="race-lap-pill">LAP <b>{hud.lap}</b><i>/</i>{hud.totalLaps}</div>
+                {hud.timed ? <div className="race-lap-pill">TIME <b>{Math.floor(hud.time / 60)}:{String(Math.floor(hud.time % 60)).padStart(2, '0')}</b></div> : <div className="race-lap-pill">LAP <b>{hud.lap}</b><i>/</i>{hud.totalLaps}</div>}
                 <div className="race-score-pill"><small>SCORE</small><b>{(hud.score || 0).toLocaleString()}</b></div>
                 <div className={`race-coin-pill ${hud.toast?.kind === 'coin' ? 'pop' : ''}`}><i>◈</i><b>{hud.coins || 0}</b><small>COINS</small></div>
                 <div className="race-place"><b>{String(hud.position).padStart(2, '0')}</b><span> / {hud.totalRacers}<small>POSITION</small></span></div>
                 <button className="race-pause" onClick={onPause} aria-label="Pause">Ⅱ</button>
             </header>
+
+            {hud.objective && (
+                <div className={`hud-objective ${hud.objective.urgent ? 'urgent' : ''}`}><span>{hud.objective.label}</span><b>{hud.objective.value}</b><small>{hud.objective.sub}</small></div>
+            )}
 
             {hud.wrongWay && (
                 <div className="hud-wrong-way" role="alert">
@@ -80,7 +84,7 @@ function RaceHUD({ hud, vehicle, eventLabel, eventTitle, minimapPath, keys, show
 
             <aside className="hud-leaderboard">
                 {visible.map((row) => (
-                    <div key={`${row.place}-${row.name}`} className={`row ${row.isPlayer ? 'me' : ''} ${row.wrecked ? 'wrecked' : ''}`}>
+                    <div key={`${row.place}-${row.name}`} className={`row ${row.isPlayer ? 'me' : ''} ${row.wrecked ? 'wrecked' : ''} ${row.police ? 'police' : ''}`}>
                         <b>{row.place}</b><span>{row.name}</span><small>{row.isPlayer ? '' : formatGap(row.gap)}</small>
                     </div>
                 ))}

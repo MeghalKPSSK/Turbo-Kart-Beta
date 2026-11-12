@@ -307,17 +307,6 @@ export const ROAD_TRACKS = [
     }
 ];
 
-export const ROAD_CAMPAIGN = [
-    { id: 'first-light', title: 'First Light', trackId: 'sunset_shores', crew: 'GRIDBREAKERS', rival: 'Mara Vale', goal: 3, chapter: 'Earn your place on the coast road.', briefing: 'A clean top-three finish puts the rookie crew on the league map.' },
-    { id: 'ridge-runner', title: 'Ridge Runner', trackId: 'rovers_rift', crew: 'GRIDBREAKERS', rival: 'Kade Rook', goal: 3, chapter: 'Take the mountain line.', briefing: 'Hold your nerve over the crests and beat the local pace setters.' },
-    { id: 'copper-line', title: 'Copper Line', trackId: 'canyon_springs', crew: 'NIGHT SHIFT', rival: 'Juniper Flux', goal: 3, chapter: 'The Night Shift wants the canyon.', briefing: 'The redstone run is narrow. Collect nitro and stay planted through the sweepers.' },
-    { id: 'green-veil', title: 'Green Veil', trackId: 'jungle_falls', crew: 'NIGHT SHIFT', rival: 'Talon Grey', goal: 3, chapter: 'Make the waterfall run yours.', briefing: 'Wet-looking scenery hides a fast road. Keep your line and finish on the podium.' },
-    { id: 'breakwater', title: 'Breakwater', trackId: 'coral_bay', crew: 'WILDLINES', rival: 'Sera Quill', goal: 2, chapter: 'Wildlines raise the stakes.', briefing: 'A second-place finish is enough to earn an invite to the highlands.' },
-    { id: 'frostbite', title: 'Frostbite', trackId: 'frost_harbor', crew: 'WILDLINES', rival: 'Brass Calder', goal: 2, chapter: 'Grip beats bravado.', briefing: 'The cold course punishes late steering. Beat the crew and keep the car on asphalt.' },
-    { id: 'after-hours', title: 'After Hours', trackId: 'rivet_factory', crew: 'FREE AGENTS', rival: 'Ivy Strake', goal: 1, chapter: 'The league night race.', briefing: 'Win under the foundry lights to claim a place in the final.' },
-    { id: 'ashfall-crown', title: 'Ashfall Crown', trackId: 'ember_crater', crew: 'CHAMPIONSHIP', rival: 'Niko Voss', goal: 1, chapter: 'One last run for the road crown.', briefing: 'Take first on the volcanic ridge and become Turbo Road League champion.' }
-];
-
 export const ROAD_RIVALS = [
     { name: 'Mara Vale', crew: 'GRIDBREAKERS', paint: 0xf1bd42 },
     { name: 'Kade Rook', crew: 'GRIDBREAKERS', paint: 0x262e39 },
@@ -341,7 +330,8 @@ export const PAINT_COLORS = [
 ];
 
 
-// Coin-funded upgrades. Every level is a real physics change (see physics/specs.js).
+// Upgrades, bought with credits (prices in data/career.js). Every level is a real physics
+// change (see physics/specs.js).
 export const UPGRADES = [
     { key: 'speed', label: 'TOP SPEED', short: 'SPD', detail: 'Raises top speed on the straights.', perLevel: '+2 m/s (+8 km/h)' },
     { key: 'accel', label: 'ACCELERATION', short: 'ACC', detail: 'More engine thrust out of every corner.', perLevel: '+8% thrust' },
@@ -350,9 +340,6 @@ export const UPGRADES = [
     { key: 'armor', label: 'ARMOR', short: 'ARM', detail: 'Soaks up crashes and takedowns.', perLevel: '-6% damage' }
 ];
 export const UPGRADE_MAX_LEVEL = 5;
-export const UPGRADE_COSTS = [30, 60, 100, 160, 240];
-
-export const upgradeCost = (level) => (level >= UPGRADE_MAX_LEVEL ? Infinity : UPGRADE_COSTS[level]);
 
 // Rival personalities: how hard each one pushes, blocks and rams.
 export const RIVAL_PROFILES = [

@@ -13,6 +13,11 @@ export class AIDriver {
         this.tracker = tracker;
         this.aggression = personality.aggression;
         this.skill = personality.skill;
+        // Optional traits: hunter rivals go looking for the player, blockers cover the player's
+        // line when ahead, and a high nitroBias burns boost far more often.
+        this.hunter = personality.hunter || 0;
+        this.block = Boolean(personality.block);
+        this.nitroBias = personality.nitroBias || 1;
         this.pace = pace;
         this.rng = mulberry32(seed * 7919 + 13);
 
@@ -107,10 +112,14 @@ export class AIDriver {
             const along = wrapDelta(player.tracker.total - t.total, track.length);
             const lateral = player.tracker.lane - t.lane;
             const straight = track.maxCurvature(s, 55) < 0.0075;
-            if (this.engage <= 0 && this.engageCooldown <= 0 && straight && Math.abs(along) < 26
-                && this.rng() < this.aggression * dt * 1.4) {
+            if (this.engage <= 0 && this.engageCooldown <= 0 && straight && Math.abs(along) < 26 + this.hunter * 34
+                && this.rng() < this.aggression * dt * 1.4 * (1 + this.hunter * 6)) {
                 this.engage = 3.2 + this.rng() * 1.6;
-                this.engageCooldown = 8 + this.rng() * 9;
+                this.engageCooldown = (8 + this.rng() * 9) * (1 - this.hunter * 0.7);
+            }
+            // A blocker ahead of the player sits on the player's line whether or not it is attacking.
+            if (this.block && this.engage <= 0 && along < -3 && along > -22) {
+                override = clamp(player.tracker.lane * 0.9, -this.laneLimit, this.laneLimit);
             }
             if (this.engage > 0 && straight) {
                 if (along > 2 && along < 30) {
@@ -184,12 +193,12 @@ export class AIDriver {
         const behind = player && player !== me && t.total < player.tracker.total - 25;
         const wantNitro = v.nitro > 0.12 && straight && Math.abs(input.steer) < 0.35 && !ramp
             && speed > 12 && speed < spec.engine.topSpeed * 1.08
-            && (behind || ramTarget || this.nitroTimer > 0 || this.rng() < dt * 0.35);
+            && (behind || ramTarget || this.nitroTimer > 0 || this.rng() < dt * 0.35 * this.nitroBias);
         if (wantNitro && this.nitroTimer <= 0) this.nitroTimer = 1.6 + this.rng() * 2.2;
         if (this.nitroTimer > 0) this.nitroTimer -= dt;
         input.nitro = wantNitro || (this.nitroTimer > 0 && straight && v.nitro > 0.05);
         // Rivals "collect" nitro too: a steady trickle, faster when chasing.
-        v.nitro = Math.min(1, v.nitro + dt * (behind ? 0.075 : 0.042));
+        v.nitro = Math.min(1, v.nitro + dt * (behind ? 0.075 : 0.042) * Math.min(1.6, this.nitroBias));
 
         this.debug = { targetLane, targetSpeed: target_v, engage: this.engage, rubber };
     }

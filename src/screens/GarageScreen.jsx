@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
-import { PAINT_COLORS, ROAD_VEHICLES, UPGRADES, UPGRADE_MAX_LEVEL, upgradeCost } from '../game/data/roadRacing';
+import { PAINT_COLORS, ROAD_VEHICLES, UPGRADES, UPGRADE_MAX_LEVEL } from '../game/data/roadRacing';
+import { CAREER_TIERS, VEHICLE_PRICES } from '../game/data/career';
+import { ownsVehicle, upgradePrice } from '../state/profile';
 import { buildVehicleSpec, describeSpec } from '../game/physics/specs';
 import RoadVehiclePreview from '../components/RoadVehiclePreview';
 import { SetupHeader, Wallet } from '../components/Chrome';
@@ -24,12 +26,15 @@ function StatRow({ label, value }) {
     );
 }
 
-export default function GarageScreen({ profile, mode, vehicle, paint, category, upgrades, onCategory, onVehicle, onPaint, onUpgrade, onBack, onContinue }) {
+export default function GarageScreen({ profile, continueLabel, vehicle, paint, category, upgrades, onCategory, onVehicle, onPaint, onUpgrade, onBuy, onBack, onContinue }) {
     const garageVehicles = useMemo(() => ROAD_VEHICLES.filter((item) => item.type === category), [category]);
     const specNow = useMemo(() => buildVehicleSpec(vehicle, upgrades), [vehicle, upgrades]);
     const describeWith = (key, level) => describeSpec(buildVehicleSpec(vehicle, { ...upgrades, [key]: level }));
     const selectedPaint = PAINT_COLORS.find((item) => item.color === paint) || PAINT_COLORS[0];
-    const coins = profile.roadCoins || 0;
+    const credits = profile.credits;
+    const owned = ownsVehicle(profile, vehicle.id);
+    const price = VEHICLE_PRICES[vehicle.id] ?? 0;
+    const bossTier = CAREER_TIERS.find((tier) => tier.crew.boss.vehicleId === vehicle.id);
     return (
         <section className="setup-screen garage-screen">
             <SetupHeader back="BACK" onBack={onBack} eyebrow="BUILD YOUR MACHINE" title="THE GARAGE"><Wallet profile={profile} /></SetupHeader>
@@ -47,8 +52,8 @@ export default function GarageScreen({ profile, mode, vehicle, paint, category, 
                     </div>
                     <div className="vehicle-card-grid">
                         {garageVehicles.map((item, index) => (
-                            <button key={item.id} className={`vehicle-option ${item.id === vehicle.id ? 'selected' : ''}`} onClick={() => onVehicle(item)}>
-                                <span className="option-index">{pad2(index + 1)}</span><span className="option-class">{item.type}</span>
+                            <button key={item.id} className={`vehicle-option ${item.id === vehicle.id ? 'selected' : ''} ${ownsVehicle(profile, item.id) ? '' : 'unowned'}`} onClick={() => onVehicle(item)}>
+                                <span className="option-index">{pad2(index + 1)}</span><span className="option-class">{ownsVehicle(profile, item.id) ? item.type : `¢${(VEHICLE_PRICES[item.id] || 0).toLocaleString()}`}</span>
                                 <b>{item.name}</b><small>{item.description}</small>
                                 <span className="option-arrow">↗</span>
                             </button>
@@ -65,13 +70,13 @@ export default function GarageScreen({ profile, mode, vehicle, paint, category, 
                         <StatRow label="HANDLING" value={vehicle.stats.handling + (upgrades.handling || 0)} />
                         <StatRow label="DURABILITY" value={vehicle.stats.armor + (upgrades.armor || 0)} />
                     </div>
-                    <div className="garage-section-title tune-heading"><span>04 / COIN UPGRADES</span><b>◈ {coins.toLocaleString()} COINS · SAVED PER VEHICLE</b></div>
+                    <div className="garage-section-title tune-heading"><span>04 / UPGRADES</span><b>{owned ? 'SAVED PER VEHICLE' : 'BUY THIS VEHICLE TO UPGRADE IT'}</b></div>
                     <div className="upgrade-list">
                         {UPGRADES.map((upgrade) => {
                             const level = upgrades[upgrade.key] || 0;
                             const maxed = level >= UPGRADE_MAX_LEVEL;
-                            const cost = upgradeCost(level);
-                            const affordable = !maxed && coins >= cost;
+                            const cost = upgradePrice(level);
+                            const affordable = owned && !maxed && credits >= cost;
                             const now = UPGRADE_NOW[upgrade.key](describeWith(upgrade.key, level));
                             const next = maxed ? null : UPGRADE_NOW[upgrade.key](describeWith(upgrade.key, level + 1));
                             return (
@@ -79,13 +84,20 @@ export default function GarageScreen({ profile, mode, vehicle, paint, category, 
                                     <div className="upgrade-name"><b>{upgrade.label}</b><small>{upgrade.detail}</small></div>
                                     <div className="upgrade-pips">{Array.from({ length: UPGRADE_MAX_LEVEL }, (_, i) => <i key={i} className={i < level ? 'on' : ''} />)}</div>
                                     <div className="upgrade-effect">{now}{next && <> <span>→</span> <em>{next}</em></>}</div>
-                                    <button className="upgrade-buy" disabled={!affordable} onClick={() => onUpgrade(upgrade.key)}>{maxed ? 'MAX' : `◈ ${cost}`}</button>
+                                    <button className="upgrade-buy" disabled={!affordable} onClick={() => onUpgrade(upgrade.key)}>{maxed ? 'MAX' : `¢${cost.toLocaleString()}`}</button>
                                 </div>
                             );
                         })}
                     </div>
                     <div className="spec-readout"><span>{specNow.isBike ? 'BIKE' : 'CAR'} · {Math.round(specNow.mass)} KG</span><span>NITRO TOP SPEED {describeSpec(specNow).nitroTopSpeedKmh} KM/H</span></div>
-                    <button className="button-primary garage-continue" onClick={onContinue}>{mode === 'story' ? 'ENTER CHAPTER' : 'PICK A ROUTE'} <span>↗</span></button>
+                    {owned
+                        ? <button className="button-primary garage-continue" onClick={onContinue}>{continueLabel} <span>↗</span></button>
+                        : (
+                            <div className="garage-locked">
+                                <p>{bossTier ? `${bossTier.crew.boss.name} of the ${bossTier.crew.name} drives this. Win the ${bossTier.name} boss duel to take it, or buy one outright.` : 'This machine is for sale.'}</p>
+                                <button className="button-primary garage-continue" disabled={credits < price} onClick={() => onBuy(vehicle.id)}>{credits < price ? `NEEDS ¢${(price - credits).toLocaleString()} MORE` : `BUY FOR ¢${price.toLocaleString()}`} <span>↗</span></button>
+                            </div>
+                        )}
                 </div>
             </div>
         </section>

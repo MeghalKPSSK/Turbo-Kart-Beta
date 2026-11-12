@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ROAD_CAMPAIGN, ROAD_TRACKS, ROAD_VEHICLES, UPGRADE_MAX_LEVEL, upgradeCost } from './game/data/roadRacing';
+import { ROAD_TRACKS, ROAD_VEHICLES } from './game/data/roadRacing';
+import { CUPS, EVENT_TYPES, cupRace, eventRace, findEvent, trackById } from './game/data/career';
 import { RoadRaceGame } from './game/systems/RoadRaceGame';
-import { loadProfile, saveProfile } from './state/profile';
+import { abandonCup, applyRaceResult, buyUpgrade, buyVehicle, loadProfile, ownsVehicle, saveProfile, startCup } from './state/profile';
 import { QUALITY_LEVELS, loadSettings, saveSettings, wantsTouchControls } from './state/settings';
 import { useRaceInput } from './input/useRaceInput';
 import HomeScreen from './screens/HomeScreen';
-import StoryScreen from './screens/StoryScreen';
+import CareerScreen from './screens/CareerScreen';
+import CupsScreen from './screens/CupsScreen';
 import GarageScreen from './screens/GarageScreen';
 import CourseScreen from './screens/CourseScreen';
 import RaceScreen from './screens/RaceScreen';
@@ -19,14 +21,18 @@ const INPUT_PHASES = ['loading', 'countdown', 'running', 'paused'];
 
 export default function App() {
     const [screen, setScreen] = useState('home');
-    const [mode, setMode] = useState('career');
-    const [storyStage, setStoryStage] = useState(0);
+    // What the player is setting up a race for: 'career' (one event), 'cup' (the next round of
+    // the cup in progress), 'quick' (any route) or 'garage' (just visiting the garage).
+    const [mode, setMode] = useState('quick');
+    const [eventId, setEventId] = useState(null);
     const [category, setCategory] = useState('BIKE');
     const [vehicleId, setVehicleId] = useState('bike_nightjar');
     const [paint, setPaint] = useState(ROAD_VEHICLES[0].defaultPaint);
     const [trackId, setTrackId] = useState(ROAD_TRACKS[0].id);
     const [profile, setProfile] = useState(loadProfile);
     const [settings, setSettings] = useState(loadSettings);
+    // Everything one race needs, fixed when it starts: route, rules, vehicle and labels.
+    const [setup, setSetup] = useState(null);
     const [racePhase, setRacePhase] = useState('idle');
     const [raceSession, setRaceSession] = useState(0);
     const [countdown, setCountdown] = useState(3);
@@ -44,13 +50,19 @@ export default function App() {
     const upgradeKey = JSON.stringify(garageEntry || {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const vehicleUpgrades = useMemo(() => garageEntry || {}, [upgradeKey]);
-    const chapter = mode === 'story' ? ROAD_CAMPAIGN[storyStage] : null;
-    const trackOptions = chapter ? ROAD_TRACKS.filter((item) => item.id === chapter.trackId) : ROAD_TRACKS;
     const touch = useMemo(() => wantsTouchControls(settings.touch), [settings.touch]);
+    const activeCup = profile.activeCup ? CUPS.find((cup) => cup.id === profile.activeCup.id) : null;
 
     useEffect(() => { saveProfile(profile); }, [profile]);
     useEffect(() => { saveSettings(settings); }, [settings]);
     useEffect(() => { gameRef.current?.setVolume(settings.volume); }, [settings.volume]);
+
+    // Results are applied to the latest save, and settings never restart a race: both are read
+    // through refs from inside the race callbacks.
+    const profileRef = useRef(profile);
+    const settingsRef = useRef(settings);
+    useEffect(() => { profileRef.current = profile; }, [profile]);
+    useEffect(() => { settingsRef.current = settings; }, [settings]);
 
     useLayoutEffect(() => {
         if (appShellRef.current) {
@@ -60,24 +72,32 @@ export default function App() {
         }
     }, [screen]);
 
-    const openGarage = (nextMode = 'career') => {
+    const openGarage = (nextMode) => {
         setMode(nextMode);
         setScreen('garage');
     };
 
-    const selectChapter = (index) => {
-        setStoryStage(index);
-        setTrackId(ROAD_CAMPAIGN[index].trackId);
-    };
-
-    const openStory = () => {
-        selectChapter(Math.min(profile.storyStage || 0, ROAD_CAMPAIGN.length - 1));
-        setMode('story');
-        setScreen('story');
+    // Builds the race for the current mode with the vehicle chosen in the garage.
+    const buildSetup = () => {
+        const machine = { vehicle, paint, upgrades: vehicleUpgrades };
+        if (mode === 'career') {
+            const item = findEvent(eventId);
+            if (!item) return null;
+            return { ...machine, mode, event: item, track: trackById(item.trackId), rules: eventRace(item),
+                label: `CAREER · ${EVENT_TYPES[item.type].label}`, title: item.name, rule: EVENT_TYPES[item.type].rule };
+        }
+        if (mode === 'cup' && activeCup) {
+            const round = profile.activeCup.round;
+            const cupTrack = trackById(activeCup.tracks[round]);
+            return { ...machine, mode, track: cupTrack, rules: cupRace(activeCup),
+                label: `${activeCup.name} · ROUND ${round + 1} OF ${activeCup.tracks.length}`, title: cupTrack.name, rule: 'Points for every finishing position. Most points after the last round takes the cup.' };
+        }
+        return { ...machine, mode: 'quick', track, rules: null, label: 'TRL / OPEN SERIES', title: track.name, rule: '' };
     };
 
     // Also restarts: a new session number tears the running race down and builds a fresh one.
-    const startRace = useCallback(() => {
+    const startRace = useCallback((nextSetup) => {
+        if (nextSetup) setSetup(nextSetup);
         setResult(null);
         setHud(null);
         setGameError('');
@@ -87,18 +107,20 @@ export default function App() {
         setScreen('race');
     }, []);
 
-    // The race itself. Settings are read through a ref so changing one never restarts a race.
-    const settingsRef = useRef(settings);
-    useEffect(() => { settingsRef.current = settings; }, [settings]);
+    const launch = () => {
+        const next = buildSetup();
+        if (next) startRace(next);
+    };
 
     useEffect(() => {
-        if (screen !== 'race' || !gameHostRef.current || gameRef.current) return undefined;
+        if (screen !== 'race' || !setup || !gameHostRef.current || gameRef.current) return undefined;
         let live = true;
         const game = new RoadRaceGame(gameHostRef.current, {
-            track,
-            vehicle,
-            paint,
-            upgrades: vehicleUpgrades,
+            track: setup.track,
+            vehicle: setup.vehicle,
+            paint: setup.paint,
+            upgrades: setup.upgrades,
+            event: setup.rules,
             quality: QUALITY_LEVELS[settingsRef.current.quality],
             volume: settingsRef.current.volume,
             onReady: (info) => {
@@ -110,27 +132,12 @@ export default function App() {
             onHUD: (data) => { if (live) setHud(data); },
             onFinish: (raceResult) => {
                 if (!live) return;
-                const chapterClear = chapter ? raceResult.position <= chapter.goal : false;
-                const chapterFinal = Boolean(chapter) && storyStage === ROAD_CAMPAIGN.length - 1;
-                setResult({ ...raceResult, mode, chapter, chapterClear, chapterFinal });
+                const outcome = applyRaceResult(profileRef.current, raceResult, setup);
+                profileRef.current = outcome.profile;
+                setProfile(outcome.profile);
+                setResult({ ...raceResult, summary: outcome.summary });
                 setRacePhase('results');
                 setScreen('result');
-                setProfile((current) => ({
-                    ...current,
-                    credits: current.credits + raceResult.credits,
-                    races: current.races + 1,
-                    wins: current.wins + (raceResult.position === 1 ? 1 : 0),
-                    bestFinish: Math.min(current.bestFinish, raceResult.position),
-                    bestTime: current.bestTime === null ? raceResult.time : Math.min(current.bestTime, raceResult.time),
-                    bestScore: Math.max(current.bestScore || 0, raceResult.score || 0),
-                    totalPoints: (current.totalPoints || 0) + (raceResult.score || 0),
-                    roadCoins: (current.roadCoins || 0) + (raceResult.coins || 0),
-                    takedowns: (current.takedowns || 0) + (raceResult.takedowns || 0),
-                    storyStage: chapterClear
-                        ? Math.min(ROAD_CAMPAIGN.length - 1, Math.max(current.storyStage || 0, storyStage + 1))
-                        : current.storyStage || 0,
-                    storyComplete: Boolean(current.storyComplete || (chapterClear && chapterFinal))
-                }));
             },
             onError: (error) => {
                 if (!live) return;
@@ -144,7 +151,7 @@ export default function App() {
             game.dispose();
             gameRef.current = null;
         };
-    }, [screen, raceSession, track, vehicle, paint, vehicleUpgrades, mode, chapter, storyStage]);
+    }, [screen, raceSession, setup]);
 
     useEffect(() => {
         if (screen !== 'race' || racePhase !== 'countdown') return undefined;
@@ -192,32 +199,26 @@ export default function App() {
         return () => document.removeEventListener('visibilitychange', handleVisibility);
     }, [screen, racePhase, pauseRace]);
 
-    const exitRace = (nextScreen = 'home') => {
+    const exitRace = (nextScreen) => {
         // The race effect's cleanup disposes the game exactly once when the screen changes.
         setRacePhase('idle');
         setHud(null);
         setScreen(nextScreen);
     };
 
+    // Where a race was entered from, for the quit and back buttons.
+    const lobby = setup?.mode === 'career' ? 'career' : setup?.mode === 'cup' ? 'cups' : 'courses';
+
     const continueFromResult = () => {
-        if (result?.mode === 'story') {
-            const next = result.chapterClear && !result.chapterFinal ? Math.min(ROAD_CAMPAIGN.length - 1, storyStage + 1) : storyStage;
-            selectChapter(next);
-            setScreen('story');
+        if (result?.summary.cup && !result.summary.cup.finished) {
+            // Straight into the next round with the same machine.
+            const cup = result.summary.cup.cup;
+            const round = result.summary.cup.round;
+            const cupTrack = trackById(cup.tracks[round]);
+            startRace({ ...setup, track: cupTrack, title: cupTrack.name, label: `${cup.name} · ROUND ${round + 1} OF ${cup.tracks.length}` });
             return;
         }
-        setScreen('courses');
-    };
-
-    const purchaseUpgrade = (key) => {
-        const level = vehicleUpgrades[key] || 0;
-        const cost = upgradeCost(level);
-        if (level >= UPGRADE_MAX_LEVEL || (profile.roadCoins || 0) < cost) return;
-        setProfile((current) => ({
-            ...current,
-            roadCoins: Math.max(0, (current.roadCoins || 0) - cost),
-            garage: { ...(current.garage || {}), [vehicleId]: { ...(current.garage?.[vehicleId] || {}), [key]: (current.garage?.[vehicleId]?.[key] || 0) + 1 } }
-        }));
+        setScreen(lobby);
     };
 
     const selectVehicle = (item) => {
@@ -227,40 +228,54 @@ export default function App() {
 
     const selectCategory = (item) => {
         setCategory(item);
-        const first = ROAD_VEHICLES.find((entry) => entry.type === item);
+        const first = ROAD_VEHICLES.find((entry) => entry.type === item && ownsVehicle(profile, entry.id)) || ROAD_VEHICLES.find((entry) => entry.type === item);
         if (first) selectVehicle(first);
+    };
+
+    const continueLabel = mode === 'career' ? 'START EVENT' : mode === 'cup' ? 'START ROUND' : mode === 'quick' ? 'PICK A ROUTE' : 'DONE';
+    const leaveGarage = () => {
+        if (mode === 'quick') setScreen('courses');
+        else if (mode === 'garage') setScreen('home');
+        else launch();
     };
 
     return (
         <main ref={appShellRef} className={`app-shell ${screen === 'race' ? 'app-racing' : ''}`}>
             {screen === 'home' && (
                 <HomeScreen profile={profile} vehicle={vehicle} paint={paint} keys={settings.keys}
-                    onStory={openStory} onQuickRace={() => openGarage('quick')} onGarage={() => openGarage('garage')}
-                    onRecords={() => setScreen('records')} onSettings={() => setScreen('settings')} />
+                    onCareer={() => setScreen('career')} onCups={() => setScreen('cups')} onQuickRace={() => openGarage('quick')}
+                    onGarage={() => openGarage('garage')} onRecords={() => setScreen('records')} onSettings={() => setScreen('settings')} />
             )}
-            {screen === 'story' && (
-                <StoryScreen profile={profile} storyStage={storyStage} onSelect={selectChapter}
-                    onBack={() => setScreen('home')} onBuild={() => { selectChapter(storyStage); openGarage('story'); }} />
+            {screen === 'career' && (
+                <CareerScreen profile={profile} selectedId={eventId} onSelect={setEventId}
+                    onBack={() => setScreen('home')} onBuild={() => openGarage('career')} />
+            )}
+            {screen === 'cups' && (
+                <CupsScreen profile={profile} onBack={() => setScreen('home')}
+                    onStart={(cupId) => { setProfile((current) => startCup(current, cupId)); openGarage('cup'); }}
+                    onContinue={() => openGarage('cup')} onAbandon={() => setProfile(abandonCup)} />
             )}
             {screen === 'garage' && (
-                <GarageScreen profile={profile} mode={mode} vehicle={vehicle} paint={paint} category={category} upgrades={vehicleUpgrades}
-                    onCategory={selectCategory} onVehicle={selectVehicle} onPaint={setPaint} onUpgrade={purchaseUpgrade}
-                    onBack={() => setScreen(mode === 'story' ? 'story' : 'home')} onContinue={() => setScreen('courses')} />
+                <GarageScreen profile={profile} continueLabel={continueLabel} vehicle={vehicle} paint={paint} category={category} upgrades={vehicleUpgrades}
+                    onCategory={selectCategory} onVehicle={selectVehicle} onPaint={setPaint}
+                    onUpgrade={(key) => setProfile((current) => buyUpgrade(current, vehicleId, key))}
+                    onBuy={(id) => setProfile((current) => buyVehicle(current, id))}
+                    onBack={() => setScreen(mode === 'career' ? 'career' : mode === 'cup' ? 'cups' : 'home')} onContinue={leaveGarage} />
             )}
             {screen === 'courses' && (
-                <CourseScreen profile={profile} chapter={chapter} storyStage={storyStage} vehicle={vehicle} track={track} trackOptions={trackOptions}
-                    onTrack={setTrackId} onBack={() => setScreen('garage')} onStart={startRace} />
+                <CourseScreen profile={profile} chapter={null} storyStage={0} vehicle={vehicle} track={track} trackOptions={ROAD_TRACKS}
+                    onTrack={setTrackId} onBack={() => setScreen('garage')} onStart={launch} />
             )}
-            {screen === 'race' && (
-                <RaceScreen hostRef={gameHostRef} phase={racePhase} countdown={countdown} hud={hud} vehicle={vehicle} track={track}
-                    chapter={chapter} storyStage={storyStage} minimapPath={minimapPath} error={gameError} keys={settings.keys} touch={touch} press={press}
-                    onPause={pauseRace} onResume={resumeRace} onRestart={startRace} onQuit={() => exitRace('home')} onBackToRoutes={() => exitRace('courses')} />
+            {screen === 'race' && setup && (
+                <RaceScreen hostRef={gameHostRef} phase={racePhase} countdown={countdown} hud={hud} vehicle={setup.vehicle} track={setup.track}
+                    label={setup.label} title={setup.title} rule={setup.rule} minimapPath={minimapPath} error={gameError} keys={settings.keys} touch={touch} press={press}
+                    onPause={pauseRace} onResume={resumeRace} onRestart={() => startRace()} onQuit={() => exitRace('home')} onBackToRoutes={() => exitRace(lobby)} />
             )}
             {screen === 'result' && result && (
-                <ResultScreen result={result} profile={profile} onContinue={continueFromResult} onRetry={startRace}
-                    onGarage={() => openGarage(mode)} onHome={() => setScreen('home')} />
+                <ResultScreen result={result} profile={profile} onContinue={continueFromResult} onRetry={() => startRace()}
+                    onGarage={() => openGarage('garage')} onHome={() => setScreen('home')} />
             )}
-            {screen === 'records' && <RecordsScreen profile={profile} onBack={() => setScreen('home')} onRace={() => openGarage('career')} />}
+            {screen === 'records' && <RecordsScreen profile={profile} onBack={() => setScreen('home')} onRace={() => setScreen('career')} />}
             {screen === 'settings' && <SettingsScreen settings={settings} onChange={setSettings} onBack={() => setScreen('home')} />}
         </main>
     );

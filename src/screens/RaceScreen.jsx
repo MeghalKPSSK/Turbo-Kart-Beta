@@ -1,14 +1,12 @@
 import RaceHUD from '../components/RaceHUD';
 import TouchControls from '../components/TouchControls';
-import { pad2 } from '../utils/format';
 
-export default function RaceScreen({ hostRef, phase, countdown, hud, vehicle, track, chapter, storyStage, minimapPath, error, keys, touch, press, onPause, onResume, onRestart, onQuit, onBackToRoutes }) {
-    const story = Boolean(chapter);
+export default function RaceScreen({ hostRef, phase, countdown, hud, vehicle, track, label, title, rule, minimapPath, error, keys, touch, press, onPause, onResume, onRestart, onQuit, onBackToRoutes }) {
     return (
         <section className="race-screen">
             <div className="race-canvas" ref={hostRef} />
-            {phase === 'loading' && <div className="race-message"><div className="loading-wheel" /><span>PREPARING THE GRID</span><small>{track.name} · {vehicle.name}</small></div>}
-            {phase === 'countdown' && <div className="race-countdown"><span>{countdown > 0 ? countdown : 'RIDE!'}</span><small>{track.name.toUpperCase()}</small></div>}
+            {phase === 'loading' && <div className="race-message"><div className="loading-wheel" /><span>PREPARING THE GRID</span><small>{track.name} · {vehicle.name}</small>{rule && <p>{rule}</p>}</div>}
+            {phase === 'countdown' && <div className="race-countdown"><span>{countdown > 0 ? countdown : 'RIDE!'}</span><small>{title.toUpperCase()}</small></div>}
             {phase === 'running' && hud && (
                 <RaceHUD
                     hud={hud}
@@ -16,8 +14,8 @@ export default function RaceScreen({ hostRef, phase, countdown, hud, vehicle, tr
                     minimapPath={minimapPath}
                     keys={keys}
                     showKeys={!touch}
-                    eventLabel={story ? `STORY ${pad2(storyStage + 1)} · VS ${chapter.rival.toUpperCase()}` : 'TRL / OPEN SERIES'}
-                    eventTitle={story ? chapter.title : track.name}
+                    eventLabel={label}
+                    eventTitle={title}
                     onPause={onPause}
                 />
             )}
@@ -34,7 +32,7 @@ export default function RaceScreen({ hostRef, phase, countdown, hud, vehicle, tr
                 <div className="race-overlay"><div className="overlay-card">
                     <span className="eyebrow">RACE SETUP</span><h2>COULD NOT LOAD</h2><p>{error}</p>
                     <button className="button-primary" onClick={onRestart}>TRY AGAIN <span>↗</span></button>
-                    <button className="button-secondary" onClick={onBackToRoutes}>BACK TO ROUTES</button>
+                    <button className="button-secondary" onClick={onBackToRoutes}>BACK</button>
                 </div></div>
             )}
         </section>

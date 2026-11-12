@@ -1,16 +1,22 @@
 // Small pieces of screen furniture shared by the menu screens.
+import { driverLevel } from '../game/data/career';
 
 export function CreditChip({ credits }) {
     return <span className="credit-chip"><i>¢</i>{credits.toLocaleString()}</span>;
 }
 
 export function Wallet({ profile }) {
+    const { level, progress } = driverLevel(profile.xp);
     return (
         <div className="garage-wallet">
+            <span className="level-chip" title="Driver level"><small>LEVEL</small><b>{level}</b><i><em style={{ width: `${Math.round(progress * 100)}%` }} /></i></span>
             <CreditChip credits={profile.credits} />
-            <span className="coin-wallet-chip"><i>◈</i>{(profile.roadCoins || 0).toLocaleString()}<small>ROAD COINS</small></span>
         </div>
     );
+}
+
+export function Stars({ count, of = 3 }) {
+    return <span className="stars" aria-label={`${count} of ${of} stars`}>{Array.from({ length: of }, (_, index) => <i key={index} className={index < count ? 'on' : ''}>★</i>)}</span>;
 }
 
 export function SetupHeader({ back, onBack, eyebrow, title, children }) {

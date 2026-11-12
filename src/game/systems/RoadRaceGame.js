@@ -86,12 +86,19 @@ const TRICK_UP2 = new THREE.Vector3();
 const NITRO_PICKUP_GAIN = 0.35;
 
 export class RoadRaceGame {
-    constructor(container, { track, vehicle, paint, upgrades, quality, volume = 1, onReady, onHUD, onFinish, onError }) {
+    constructor(container, { track, vehicle, paint, upgrades, event = null, quality, volume = 1, onReady, onHUD, onFinish, onError }) {
         this.container = container;
         this.trackInfo = track;
         this.vehicleInfo = vehicle;
         this.paint = paint;
         this.upgrades = upgrades || {};
+        // Career event rules (see data/career.js eventRace). null is a plain race against the default field.
+        this.event = event;
+        this.driftPoints = 0;
+        this.wrecks = 0;
+        this.busted = false;
+        this.timedOut = false;
+        this.nextCut = event?.interval || 0;
         this.quality = { pixelRatio: 1.75, antialias: true, shadows: 2048, particles: 1, ...(quality || {}) };
         this.onReady = onReady;
         this.onHUD = onHUD;
@@ -163,7 +170,7 @@ export class RoadRaceGame {
         const roadGeometry = extractRoadGeometry(this.trackScene);
         this.physics = new PhysicsWorld(RAPIER, this.model, roadGeometry);
         this.collisions = new CollisionSystem(this.physics);
-        this.raceLength = info.laps || 3;
+        this.raceLength = this.event?.laps || info.laps || 3;
 
         this.createRenderer();
         const shadows = this.quality.shadows > 0;
@@ -268,51 +275,58 @@ export class RoadRaceGame {
 
     createRacers() {
         const info = this.trackInfo;
-        const grade = GRADE_PACE[info.grade] ?? 1;
+        const config = this.event;
         const gradeIndex = Object.keys(GRADE_PACE).indexOf(info.grade);
-        const power = 0.94 + Math.max(0, gradeIndex) * 0.055;
-        const total = ROAD_RIVALS.length + 1;
+        const pace = config?.pace ?? GRADE_PACE[info.grade] ?? 1;
+        const power = config?.power ?? 0.94 + Math.max(0, gradeIndex) * 0.055;
+        const rivals = config?.rivals ?? ROAD_RIVALS.map((rival, index) => ({ ...rival, profile: RIVAL_PROFILES[index % RIVAL_PROFILES.length] }));
+        const total = rivals.length + 1;
+        const playerSlot = Math.min(config?.playerSlot ?? PLAYER_GRID_SLOT, total - 1);
         let aiIndex = 0;
         for (let slot = 0; slot < total; slot += 1) {
-            const isPlayer = slot === PLAYER_GRID_SLOT;
-            let vehicleInfo = this.vehicleInfo;
-            let paint = this.paint;
-            let upgrades = this.upgrades;
-            let name = 'YOU';
-            let profile = null;
-            if (!isPlayer) {
-                const rival = ROAD_RIVALS[aiIndex];
-                vehicleInfo = ROAD_VEHICLES[(aiIndex * 3 + 1) % ROAD_VEHICLES.length];
-                paint = rival.paint;
-                upgrades = {};
-                name = rival.name;
-                profile = RIVAL_PROFILES[aiIndex % RIVAL_PROFILES.length];
-                aiIndex += 1;
-            }
-            const spec = buildVehicleSpec(vehicleInfo, upgrades, { gravity: this.model.gravity, power: isPlayer ? 1 : power });
-            const id = isPlayer ? 'player' : `rival_${aiIndex - 1}`;
+            const isPlayer = slot === playerSlot;
+            const rival = isPlayer ? null : rivals[aiIndex];
+            const vehicleInfo = isPlayer ? this.vehicleInfo
+                : ROAD_VEHICLES.find((item) => item.id === rival.vehicleId) || ROAD_VEHICLES[(aiIndex * 3 + 1) % ROAD_VEHICLES.length];
+            const spec = buildVehicleSpec(vehicleInfo, isPlayer ? this.upgrades : {}, { gravity: this.model.gravity, power: isPlayer ? 1 : power * (rival.power || 1) });
+            const id = isPlayer ? 'player' : `rival_${aiIndex}`;
+            const name = isPlayer ? 'YOU' : rival.name;
             const vehicle = new Vehicle(this.physics, spec, { id, name, isPlayer });
             const slotPose = gridSlot(this.model, slot);
             vehicle.place(slotPose.x, slotPose.y + 0.35, slotPose.z, slotPose.forward, 0);
             vehicle.hold = true;
             vehicle.nitro = isPlayer ? 0.3 : 0.2;
             this.physics.addVehicle(vehicle);
-            const visual = createVehicleVisual(this.vehicleAssets.get(vehicleInfo.id), { paint, spec, castShadow: this.quality.shadows > 0 });
+            const visual = createVehicleVisual(this.vehicleAssets.get(vehicleInfo.id), { paint: isPlayer ? this.paint : rival.paint, spec, castShadow: this.quality.shadows > 0 });
             this.scene.add(visual.root);
             const tracker = new ProgressTracker(this.model, vehicle);
-            const driver = isPlayer ? null : new AIDriver({
-                track: this.model, vehicle, tracker, personality: profile, pace: grade, seed: slot + 3
-            });
+            const driver = isPlayer ? null : new AIDriver({ track: this.model, vehicle, tracker, personality: rival.profile, pace, seed: slot + 3 });
             const nitroFx = new NitroEffect(this.scene, visual, { exhausts: vehicleInfo.dims.exhausts, isPlayer, glow: this.glow });
             const racer = {
                 id, name, isPlayer, vehicle, visual, tracker, driver, nitroFx, spec, info: vehicleInfo,
                 lap: 1, finished: false, finishTime: null, lastLapTime: 0, laps: [], rank: slot + 1,
                 pos: new THREE.Vector3(), quat: new THREE.Quaternion(),
-                smokeTimer: 0, wasWrecked: false, crew: isPlayer ? 'GRIDBREAKERS' : ROAD_RIVALS[aiIndex - 1].crew
+                smokeTimer: 0, wasWrecked: false, crew: isPlayer ? 'YOU' : rival.crew,
+                police: Boolean(rival?.police), eliminated: false, eliminatedAt: null, beacon: null
             };
+            if (racer.police) racer.beacon = this.addBeacon(visual, vehicleInfo);
             this.racers.push(racer);
             if (isPlayer) this.player = racer;
+            else aiIndex += 1;
         }
+    }
+
+    // Red and blue roof lights for a pursuit unit; updateVisuals flashes them.
+    addBeacon(visual, vehicleInfo) {
+        const height = vehicleInfo.type === 'BIKE' ? 1.75 : 1.45;
+        const make = (color, x) => {
+            const light = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.14, 0.24),
+                new THREE.MeshStandardMaterial({ color: 0x111111, emissive: color, emissiveIntensity: 0 }));
+            light.position.set(x, height, 0.1);
+            visual.lean.add(light);
+            return light;
+        };
+        return [make(0xff2a2a, 0.22), make(0x2a6bff, -0.22)];
     }
 
     buildMinimapPath() {
@@ -506,6 +520,7 @@ export class RoadRaceGame {
     updateRecovery(dt) {
         for (const racer of this.racers) {
             const { vehicle, tracker } = racer;
+            if (racer.eliminated) continue;
             if (needsRecovery(vehicle)) {
                 if (vehicle.invalid && import.meta.env.DEV) console.warn(`[physics] ${racer.id} had a non-finite or disabled body; repaired`);
                 recoverVehicle(this.model, tracker, vehicle);
@@ -621,7 +636,7 @@ export class RoadRaceGame {
             } else if (ev.type === 'destroyed') {
                 const racer = this.racers.find((r) => r.vehicle === ev.vehicle);
                 this.explosion(ev.vehicle.position);
-                if (racer?.isPlayer) { this.showBanner('WRECKED', 'Your car took too much damage', 'wrecked', 2); this.audio.wrecked(); this.cameraRig.addShake(1); }
+                if (racer?.isPlayer) { this.showBanner('WRECKED', 'Your car took too much damage', 'wrecked', 2); this.audio.wrecked(); this.cameraRig.addShake(1); this.countWreck(); }
             }
         }
     }
@@ -639,6 +654,7 @@ export class RoadRaceGame {
             this.cameraRig.addShake(0.8);
         } else if (victim?.isPlayer) {
             this.showBanner('TAKEN DOWN', `by ${attacker?.name ?? 'a rival'}`, 'wrecked', 2);
+            this.countWreck();
             this.audio.wrecked();
             this.cameraRig.addShake(1);
             this.damageFlash = 1;
@@ -682,12 +698,77 @@ export class RoadRaceGame {
         }
         this.ranking = this.computeRanking();
         if (this.player.finished && !this.finished) this.finishRace();
+        if (!this.finished) this.updateEvent();
         void dt;
+    }
+
+    // Rules that end a career event some other way than crossing the line.
+    updateEvent() {
+        const config = this.event;
+        if (!config || !this.started) return;
+        if (config.timeLimit && this.elapsed >= config.timeLimit) {
+            this.timedOut = true;
+            this.finishRace();
+            return;
+        }
+        if (config.interval && this.elapsed >= this.nextCut) {
+            this.nextCut += config.interval;
+            const running = this.ranking.filter((racer) => !racer.eliminated);
+            const last = running[running.length - 1];
+            if (last) this.eliminate(last);
+            if (!this.finished && running.length - 1 <= 1) this.finishRace();
+        }
+    }
+
+    eliminate(racer) {
+        racer.eliminated = true;
+        racer.eliminatedAt = this.elapsed;
+        this.ranking = this.computeRanking();
+        if (racer.isPlayer) {
+            this.showBanner('ELIMINATED', 'You were in last place', 'wrecked', 2);
+            this.finishRace();
+            return;
+        }
+        // Parked, intangible and hidden for the rest of the event.
+        racer.vehicle.hold = true;
+        racer.vehicle.grantGhost(1e9);
+        this.showToast(`${racer.name.toUpperCase()} IS OUT`, 'bad', 1.6);
+        this.audio.countdown(false);
+    }
+
+    // Pursuit events end when the player has been wrecked three times.
+    countWreck() {
+        this.wrecks += 1;
+        if (this.event?.type === 'pursuit' && this.wrecks >= 3 && !this.finished) {
+            this.busted = true;
+            this.finishRace();
+        }
+    }
+
+    // The line under the lap counter that says how the event is going.
+    objective() {
+        const config = this.event;
+        if (!config) return null;
+        const left = (seconds) => `${Math.floor(Math.max(0, seconds) / 60)}:${String(Math.floor(Math.max(0, seconds) % 60)).padStart(2, '0')}`;
+        switch (config.type) {
+            case 'timeTrial': return { label: 'TARGET', value: `${config.targets[2]}s`, sub: `${config.targets[1]}s · ${config.targets[0]}s` };
+            case 'drift': return { label: 'DRIFT POINTS', value: Math.round(this.driftPoints).toLocaleString(), sub: `★ ${config.targets.join(' · ')}` };
+            case 'takedown': return { label: 'TAKEDOWNS', value: String(this.takedowns), sub: `★ ${config.targets.join(' · ')} · ${left(config.timeLimit - this.elapsed)} LEFT`, urgent: config.timeLimit - this.elapsed < 15 };
+            case 'elimination': return { label: 'NEXT OUT IN', value: left(this.nextCut - this.elapsed), sub: `${this.racers.filter((racer) => !racer.eliminated).length} STILL RUNNING`, urgent: this.player.rank === this.racers.filter((racer) => !racer.eliminated).length };
+            case 'pursuit': return { label: 'WRECKS', value: `${this.wrecks} / 3`, sub: 'THREE AND YOU ARE BUSTED', urgent: this.wrecks >= 2 };
+            case 'duel': return { label: 'DUEL', value: config.bossName.toUpperCase(), sub: this.player.rank === 1 ? 'YOU LEAD' : 'YOU TRAIL', urgent: this.player.rank !== 1 };
+            default: return null;
+        }
     }
 
     computeRanking() {
         const order = [...this.racers];
         order.sort((a, b) => {
+            // Eliminated racers rank below everyone still running, latest out first.
+            if (a.eliminated || b.eliminated) {
+                if (a.eliminated && b.eliminated) return b.eliminatedAt - a.eliminatedAt;
+                return a.eliminated ? 1 : -1;
+            }
             if (a.finished && b.finished) return a.finishTime - b.finishTime;
             if (a.finished) return -1;
             if (b.finished) return 1;
@@ -707,7 +788,11 @@ export class RoadRaceGame {
         // Distance score and clean-driving nitro.
         this.score += Math.max(0, v.speed) * dt * 0.9;
         if (v.speed > 25 && !v.nitroActive) v.nitro = Math.min(1, v.nitro + dt * 0.006);
-        if (v.drifting) { this.score += dt * v.speedAbs * 1.6; }
+        if (v.drifting) {
+            this.score += dt * v.speedAbs * 1.6;
+            // Drift events score angle as well as speed.
+            this.driftPoints += dt * v.speedAbs * (0.6 + Math.min(1, Math.abs(v.slipAngle) * 2));
+        }
         else if (this.driftWasActive && v.driftCharge > 0.12) {
             const reward = Math.min(0.32, v.driftCharge * 0.34);
             v.nitro = Math.min(1, v.nitro + reward);
@@ -771,10 +856,19 @@ export class RoadRaceGame {
         const placement = [1500, 1100, 800, 550, 400, 300, 200, 120, 80][position - 1] || 50;
         this.audio.setMuted(true);
         this.publishHUD();
+        // The gap to the winner, for duels: positive when the player lost.
+        const leader = this.ranking[0];
+        const gap = leader === player ? 0 : leader.finished ? Math.max(0, this.elapsed - leader.finishTime) : null;
         this.onFinish?.({
             position,
             totalRacers: this.racers.length,
-            time: player.finishTime,
+            time: player.finishTime ?? this.elapsed,
+            eventType: this.event?.type || 'race',
+            driftPoints: Math.round(this.driftPoints),
+            wrecks: this.wrecks,
+            busted: this.busted,
+            timedOut: this.timedOut,
+            gap,
             bestLap: this.bestLap,
             credits: credits + cleanBonus + this.coins * 25 + this.takedowns * 60,
             coins: this.coins,
@@ -805,9 +899,14 @@ export class RoadRaceGame {
             }
             updateVehicleVisual(visual, vehicle, dt || 0.016);
             // Ghost cars (just respawned) blink so they read as intangible.
-            visual.root.visible = vehicle.ghostTimer <= 0 || Math.floor(time * 12) % 2 === 0;
+            visual.root.visible = !racer.eliminated && (vehicle.ghostTimer <= 0 || Math.floor(time * 12) % 2 === 0);
+            if (racer.beacon) {
+                const phase = Math.floor(time * 6) % 2;
+                racer.beacon[0].material.emissiveIntensity = phase ? 9 : 0.2;
+                racer.beacon[1].material.emissiveIntensity = phase ? 0.2 : 9;
+            }
             racer.nitroFx.update(dt, time, vehicle, this.camera, this.particles);
-            this.emitGroundEffects(racer, dt);
+            if (!racer.eliminated) this.emitGroundEffects(racer, dt);
         }
         const p = this.player;
         const sun = this.sun;
@@ -866,10 +965,11 @@ export class RoadRaceGame {
         const ranking = this.ranking || this.computeRanking();
         const leaderboard = ranking.map((racer) => ({
             name: racer.name, isPlayer: racer.isPlayer, place: racer.rank, finished: racer.finished,
-            gap: Math.round(racer.tracker.total - t.total), wrecked: racer.vehicle.mode === 'wrecked'
+            gap: Math.round(racer.tracker.total - t.total), wrecked: racer.vehicle.mode === 'wrecked' || racer.eliminated,
+            police: racer.police
         }));
-        const dots = this.racers.map((racer) => ({
-            isPlayer: racer.isPlayer, pos: this.toMinimap(racer.vehicle.position.x, racer.vehicle.position.z), wrecked: racer.vehicle.mode === 'wrecked'
+        const dots = this.racers.filter((racer) => !racer.eliminated).map((racer) => ({
+            isPlayer: racer.isPlayer, pos: this.toMinimap(racer.vehicle.position.x, racer.vehicle.position.z), wrecked: racer.vehicle.mode === 'wrecked', police: racer.police
         }));
         const topSpeed = player.spec.engine.topSpeed * player.spec.engine.nitroTopSpeed;
         this.onHUD?.({
@@ -884,6 +984,8 @@ export class RoadRaceGame {
             totalRacers: this.racers.length,
             lap: player.lap,
             totalLaps: this.raceLength,
+            timed: this.raceLength >= 99,
+            objective: this.objective(),
             time: this.elapsed,
             damage: Math.round((1 - v.health) * 100),
             boost: Math.round(v.nitro * 100),
@@ -897,7 +999,8 @@ export class RoadRaceGame {
             airTime: v.airborne ? v.airTime : 0,
             recovering: v.mode === 'wrecked',
             ghost: v.ghostTimer > 0,
-            progress: Math.max(0, Math.min(1, t.total / (this.raceLength * this.model.length))),
+            progress: this.event?.timeLimit ? Math.min(1, this.elapsed / this.event.timeLimit)
+                : Math.max(0, Math.min(1, t.total / (this.raceLength * this.model.length))),
             toast: this.toast.timer > 0 ? { text: this.toast.text, kind: this.toast.kind } : null,
             banner: this.banner.timer > 0 ? { text: this.banner.text, sub: this.banner.sub, kind: this.banner.kind } : null,
             damageFlash: this.damageFlash,

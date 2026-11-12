@@ -391,3 +391,60 @@ button:focus-visible { outline: 2px solid #ffe28e; outline-offset: 3px; }
   .settings-choice { grid-column: 1; }
   .settings-row input[type='range'] { width: 100%; }
 }
+
+/* Career, cups and event HUD */
+.level-chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(233, 240, 235, .14); border-radius: 3px; }
+.level-chip small { color: #8f9ea0; font: 700 7px 'DM Sans', sans-serif; letter-spacing: .14em; }
+.level-chip b { color: #f2c27b; font: 800 15px 'Barlow Condensed', sans-serif; }
+.level-chip i { width: 42px; height: 3px; background: rgba(255, 255, 255, .12); }
+.level-chip em { display: block; height: 100%; background: #f2c27b; }
+.stars { display: inline-flex; gap: 2px; }
+.stars i { color: rgba(255, 255, 255, .22); font-style: normal; }
+.stars i.on { color: #ffd25a; text-shadow: 0 0 8px rgba(255, 196, 70, .6); }
+.tier-tabs { width: min(1440px, 100%); margin: 14px auto 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.tier-tabs button { display: flex; flex-direction: column; gap: 2px; padding: 9px 12px; text-align: left; color: #c9d3cf; background: #141c20; border: 1px solid rgba(223, 236, 231, .08); cursor: pointer; }
+.tier-tabs button.active { border-color: #ee995f; background: #1b252a; }
+.tier-tabs button.locked { opacity: .5; }
+.tier-tabs small { color: #e89a62; font: 700 7px 'DM Sans', sans-serif; letter-spacing: .14em; }
+.tier-tabs b { font: 800 20px 'Barlow Condensed', sans-serif; letter-spacing: .04em; }
+.tier-tabs span { color: #8f9ea0; font: 700 8px 'DM Sans', sans-serif; letter-spacing: .1em; }
+.crew-intro { border-left: 3px solid var(--crew, #ee995f); }
+.crew-intro > b { font-size: 20px; }
+.event-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.event-grid .story-card-art > b { font-size: 13px; top: 6px; }
+.cup-active { align-items: flex-start; gap: 24px; }
+.cup-actions { display: flex; gap: 10px; margin-top: 12px; }
+.cup-table { margin: 0; padding: 0; list-style: none; min-width: 230px; display: flex; flex-direction: column; gap: 3px; }
+.cup-table li { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: center; padding: 5px 9px; background: rgba(255, 255, 255, .04); color: #cfd8d4; font: 600 11px 'DM Sans', sans-serif; }
+.cup-table li.me { background: rgba(238, 153, 95, .2); color: #fff; }
+.cup-table i { color: #8f9ea0; font-style: normal; font-weight: 700; }
+.cup-table b { font: 800 14px 'Barlow Condensed', sans-serif; }
+.cup-card { cursor: default; }
+.cup-card.locked { opacity: .55; }
+.cup-rounds { margin: 8px 0 10px; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px; }
+.cup-rounds li { padding: 3px 7px; background: rgba(255, 255, 255, .06); color: #b9c4c0; font: 600 8px 'DM Sans', sans-serif; letter-spacing: .06em; }
+.cup-card .button-secondary { width: 100%; }
+.cup-result { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.vehicle-option.unowned { opacity: .7; }
+.vehicle-option.unowned .option-class { color: #f2c27b; }
+.garage-locked p { margin: 0 0 8px; color: #9eabad; font-size: 11px; line-height: 1.5; }
+.result-stars { font-size: 34px; margin-bottom: 6px; }
+.result-metric { font-size: clamp(46px, 8vw, 92px) !important; }
+.boss-line { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; margin-bottom: 8px; background: rgba(255, 255, 255, .04); border-left: 3px solid #d54567; }
+.boss-line.clear { border-left-color: #7fcf8f; }
+.boss-line b { color: #e8efeb; font: 800 13px 'Barlow Condensed', sans-serif; letter-spacing: .1em; }
+.boss-line span { color: #b9c4c0; font-size: 12px; font-style: italic; line-height: 1.5; }
+.race-message p { max-width: 360px; margin: 8px 0 0; color: #b9c4c0; font-size: 11px; line-height: 1.5; text-align: center; }
+.hud-objective { position: absolute; z-index: 3; top: 64px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 18px 8px; background: rgba(8, 14, 16, .72); border: 1px solid rgba(238, 246, 242, .18); border-radius: 4px; }
+.hud-objective span { color: #e89a62; font: 700 8px 'DM Sans', sans-serif; letter-spacing: .16em; }
+.hud-objective b { color: #fff; font: 800 24px 'Barlow Condensed', sans-serif; letter-spacing: .04em; }
+.hud-objective small { color: #9eabad; font: 700 8px 'DM Sans', sans-serif; letter-spacing: .1em; }
+.hud-objective.urgent { border-color: #e83e2d; }
+.hud-objective.urgent b { color: #ff8a70; }
+.hud-dot.police { fill: #4d8dff; }
+.hud-leaderboard .row.police span { color: #8fb6ff; }
+@media (max-width: 900px) {
+  .tier-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .event-grid { grid-template-columns: 1fr; }
+  .cup-active { flex-direction: column; }
+}
