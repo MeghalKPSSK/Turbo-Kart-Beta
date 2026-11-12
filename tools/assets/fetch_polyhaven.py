@@ -13,6 +13,8 @@ Everything on Poly Haven is CC0: free for any use, no attribution required.
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 import sys
 import urllib.request
 from pathlib import Path
@@ -51,6 +53,18 @@ def download(url, target):
             handle.write(chunk)
 
 
+def shrink_detail_maps(folder):
+    """Normal and roughness maps are halved to 512 px: they cost download size and the
+    difference is not visible at racing speed. Uses macOS ``sips``; skipped elsewhere."""
+    if not shutil.which("sips"):
+        print("  sips not found: leaving the detail maps at 1024 px")
+        return
+    for path in sorted(folder.glob("*.jpg")):
+        size = "512" if path.stem.endswith(("_nor_gl", "_rough")) else "1024"
+        subprocess.run(["sips", "-Z", size, "-s", "formatOptions", "80", str(path), "--out", str(path)],
+                       check=True, stdout=subprocess.DEVNULL)
+
+
 def main():
     textures = ROOT / "public" / "textures"
     for name, asset in TEXTURES.items():
@@ -59,6 +73,8 @@ def main():
         for short, key in TEXTURE_MAPS.items():
             entry = files[key]["1k"]["jpg"]
             download(entry["url"], textures / f"{name}_{short}.jpg")
+
+    shrink_detail_maps(textures)
 
     print(f"sky {SKY}")
     files = fetch_json(API + SKY)

@@ -5,6 +5,7 @@ import { RoadRaceGame } from './game/systems/RoadRaceGame';
 import { abandonCup, applyRaceResult, buyUpgrade, buyVehicle, loadProfile, ownsVehicle, saveProfile, startCup } from './state/profile';
 import { QUALITY_LEVELS, loadSettings, saveSettings, wantsTouchControls } from './state/settings';
 import { useRaceInput } from './input/useRaceInput';
+import { uiAudio } from './state/uiAudio';
 import HomeScreen from './screens/HomeScreen';
 import CareerScreen from './screens/CareerScreen';
 import CupsScreen from './screens/CupsScreen';
@@ -55,7 +56,20 @@ export default function App() {
 
     useEffect(() => { saveProfile(profile); }, [profile]);
     useEffect(() => { saveSettings(settings); }, [settings]);
-    useEffect(() => { gameRef.current?.setVolume(settings.volume); }, [settings.volume]);
+    useEffect(() => {
+        gameRef.current?.setVolume(settings.volume);
+        uiAudio.setVolume(settings.volume);
+    }, [settings.volume]);
+
+    // Every button ticks. Race controls are excluded: they have the engine to listen to.
+    useEffect(() => {
+        const handleClick = (event) => {
+            const button = event.target instanceof Element ? event.target.closest('button') : null;
+            if (button && !button.disabled && !button.closest('.touch-controls')) uiAudio.click();
+        };
+        document.addEventListener('click', handleClick, true);
+        return () => document.removeEventListener('click', handleClick, true);
+    }, []);
 
     // Results are applied to the latest save, and settings never restart a race: both are read
     // through refs from inside the race callbacks.
@@ -136,6 +150,8 @@ export default function App() {
                 profileRef.current = outcome.profile;
                 setProfile(outcome.profile);
                 setResult({ ...raceResult, summary: outcome.summary });
+                if (outcome.summary.mode === 'career') uiAudio.stars(outcome.summary.stars);
+                else uiAudio.finish(raceResult.position);
                 setRacePhase('results');
                 setScreen('result');
             },
@@ -157,6 +173,7 @@ export default function App() {
         if (screen !== 'race' || racePhase !== 'countdown') return undefined;
         const timer = window.setTimeout(() => {
             if (countdown > 1) {
+                gameRef.current?.countBeep();
                 setCountdown(countdown - 1);
             } else {
                 setCountdown(0);
@@ -258,8 +275,8 @@ export default function App() {
             {screen === 'garage' && (
                 <GarageScreen profile={profile} continueLabel={continueLabel} vehicle={vehicle} paint={paint} category={category} upgrades={vehicleUpgrades}
                     onCategory={selectCategory} onVehicle={selectVehicle} onPaint={setPaint}
-                    onUpgrade={(key) => setProfile((current) => buyUpgrade(current, vehicleId, key))}
-                    onBuy={(id) => setProfile((current) => buyVehicle(current, id))}
+                    onUpgrade={(key) => { uiAudio.buy(); setProfile((current) => buyUpgrade(current, vehicleId, key)); }}
+                    onBuy={(id) => { uiAudio.buy(); setProfile((current) => buyVehicle(current, id)); }}
                     onBack={() => setScreen(mode === 'career' ? 'career' : mode === 'cup' ? 'cups' : 'home')} onContinue={leaveGarage} />
             )}
             {screen === 'courses' && (

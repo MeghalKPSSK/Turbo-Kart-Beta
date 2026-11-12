@@ -138,7 +138,7 @@ export class RoadRaceGame {
         this.damageFlash = 0;
         this.autopilot = null;
         this.eventLog = [];
-        this.audio = new GameAudio(volume);
+        this.audio = new GameAudio(volume, { bike: vehicle.type === 'BIKE', city: Boolean(track.city) });
         this.frame = this.frame.bind(this);
         this.resize = this.resize.bind(this);
         this.init().catch((error) => {
@@ -374,6 +374,12 @@ export class RoadRaceGame {
         if (this.analog.throttle > 0.1 || this.analog.brake > 0.1) this.ensureAudio();
     }
 
+    // One beep per count of the start countdown.
+    countBeep() {
+        this.ensureAudio();
+        this.audio.countdown(false);
+    }
+
     setVolume(volume) {
         this.audio.setVolume(volume);
     }
@@ -397,6 +403,7 @@ export class RoadRaceGame {
         this.lapStart = 0;
         this.showToast('GO!', 'good', 1.1);
         this.audio.countdown(true);
+        this.audio.crowd(1);
     }
 
     // Test hook: let the AI drive the player's car (profile: aggression 0).
@@ -926,8 +933,18 @@ export class RoadRaceGame {
         const slide = Math.min(1, (Math.abs(v.slipAngle) - 0.08) * 3 + (v.drifting ? 0.35 : 0)) * (v.speedAbs > 8 ? 1 : 0);
         this.audio.update({
             rpm: v.rpm, throttle: this.started ? Math.max(0.1, v.input.throttle) : 0.1, running: !this.paused && !this.finished && this.ready,
-            speedRatio, nitro, slip: Math.max(0, slide), airborne: v.airborne
+            speedRatio, nitro, slip: Math.max(0, slide), airborne: v.airborne, gear: v.gear, siren: this.sirenLevel()
         });
+    }
+
+    // How close the nearest pursuit unit is, 0 (none within 120 m) to 1 (alongside).
+    sirenLevel() {
+        let nearest = Infinity;
+        for (const racer of this.racers) {
+            if (!racer.police) continue;
+            nearest = Math.min(nearest, Math.hypot(racer.pos.x - this.player.pos.x, racer.pos.z - this.player.pos.z));
+        }
+        return nearest === Infinity ? 0 : Math.max(0, 1 - nearest / 120) * 0.85 + 0.15;
     }
 
     emitGroundEffects(racer, dt) {

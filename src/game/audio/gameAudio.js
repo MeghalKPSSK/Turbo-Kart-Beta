@@ -2,7 +2,11 @@
 // effects. Nothing is loaded from disk, and audio only starts after the first key press.
 
 export class GameAudio {
-    constructor(volume = 1) {
+    // options: bike (higher, thinner engine note), city (street ambience under everything)
+    constructor(volume = 1, { bike = false, city = false } = {}) {
+        this.bike = bike;
+        this.city = city;
+        this.gear = 1;
         this.context = null;
         this.nodes = null;
         this.volume = volume;
@@ -79,9 +83,21 @@ export class GameAudio {
             const squealNoise = makeNoise();
             squealNoise.connect(squealFilter); squealFilter.connect(squealGain); squealGain.connect(master);
 
+            // City ambience: a low, steady street rumble.
+            const cityGain = ctx.createGain(); cityGain.gain.value = 0;
+            const cityFilter = ctx.createBiquadFilter(); cityFilter.type = 'lowpass'; cityFilter.frequency.value = 170;
+            const cityNoise = makeNoise();
+            cityNoise.connect(cityFilter); cityFilter.connect(cityGain); cityGain.connect(master);
+
+            // Pursuit siren: one oscillator swept between two notes.
+            const siren = ctx.createOscillator(); siren.type = 'square'; siren.frequency.value = 650;
+            const sirenFilter = ctx.createBiquadFilter(); sirenFilter.type = 'bandpass'; sirenFilter.frequency.value = 900; sirenFilter.Q.value = 1.2;
+            const sirenGain = ctx.createGain(); sirenGain.gain.value = 0;
+            siren.connect(sirenFilter); sirenFilter.connect(sirenGain); sirenGain.connect(master); siren.start();
+
             this.noiseBuffer = noiseBuffer;
             this.context = ctx;
-            this.nodes = { master, engineGain, engineFilter, saw1, saw2, sub, windGain, windFilter, nitroGain, nitroFilter, roar, roarGain, squealGain, squealFilter };
+            this.nodes = { master, engineGain, engineFilter, saw1, saw2, sub, windGain, windFilter, nitroGain, nitroFilter, roar, roarGain, squealGain, squealFilter, cityGain, siren, sirenGain };
             ctx.resume().catch(() => {});
         } catch (error) {
             console.warn('Audio is unavailable in this browser.', error);
@@ -104,12 +120,27 @@ export class GameAudio {
         const now = ctx.currentTime;
         const running = state.running;
         const rpm = state.rpm;
-        const base = 38 + rpm * 118 + state.speedRatio * 24;
+        const base = (38 + rpm * 118 + state.speedRatio * 24) * (this.bike ? 1.55 : 1);
         n.saw1.frequency.setTargetAtTime(base, now, 0.04);
         n.saw2.frequency.setTargetAtTime(base * 1.503, now, 0.04);
         n.sub.frequency.setTargetAtTime(base * 0.5, now, 0.04);
         n.engineFilter.frequency.setTargetAtTime(420 + rpm * 1500 + state.throttle * 900, now, 0.06);
-        n.engineGain.gain.setTargetAtTime(running ? 0.05 + state.throttle * 0.085 + rpm * 0.03 : 0, now, 0.06);
+        // A gear change cuts the drive for an instant before the note picks up again.
+        const shifted = running && state.gear !== undefined && state.gear !== this.gear;
+        if (state.gear !== undefined) this.gear = state.gear;
+        const engineLevel = running ? 0.05 + state.throttle * 0.085 + rpm * 0.03 : 0;
+        if (shifted) {
+            n.engineGain.gain.cancelScheduledValues(now);
+            n.engineGain.gain.setValueAtTime(engineLevel * 0.35, now);
+            n.engineGain.gain.linearRampToValueAtTime(engineLevel, now + 0.14);
+        } else {
+            n.engineGain.gain.setTargetAtTime(engineLevel, now, 0.06);
+        }
+        n.cityGain.gain.setTargetAtTime(running && this.city ? 0.05 : 0, now, 0.4);
+        // Siren: louder the closer the nearest pursuit unit is (state.siren is 0..1).
+        const siren = running ? Math.min(1, Math.max(0, state.siren || 0)) : 0;
+        n.sirenGain.gain.setTargetAtTime(siren * 0.045, now, 0.12);
+        n.siren.frequency.setTargetAtTime(Math.floor(now * 1.7) % 2 ? 870 : 650, now, 0.05);
         n.windGain.gain.setTargetAtTime(running ? Math.min(0.16, state.speedRatio * state.speedRatio * 0.2) : 0, now, 0.1);
         n.windFilter.frequency.setTargetAtTime(300 + state.speedRatio * 1400, now, 0.1);
         n.nitroGain.gain.setTargetAtTime(state.nitro * 0.22, now, 0.05);
@@ -164,6 +195,8 @@ export class GameAudio {
     takedown() { this.impact(1.4); this.tone(220, 0.5, 'sawtooth', 880, 0.16); setTimeout(() => this.tone(660, 0.35, 'square', 990, 0.1), 120); }
     wrecked() { this.noiseBurst(0.7, 400, 0.4, 0.5, 'lowpass'); this.tone(150, 0.7, 'sawtooth', 40, 0.22); }
     countdown(final = false) { this.tone(final ? 880 : 520, final ? 0.5 : 0.18, 'square', final ? 880 : 520, 0.12); }
+    // A crowd reacting: band-passed noise that swells and dies away.
+    crowd(strength = 1) { this.noiseBurst(1.6, 1100, 0.16 * strength, 0.7); this.noiseBurst(1.1, 2300, 0.07 * strength, 0.9); }
     horn() { this.tone(330, 0.4, 'square', 330, 0.07); }
 
     dispose() {

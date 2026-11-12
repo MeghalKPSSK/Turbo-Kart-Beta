@@ -139,6 +139,7 @@ export const ROAD_VEHICLES = [
 export const ROAD_TRACKS = [
     {
         id: 'downtown_circuit',
+        city: true,
         name: 'Meridian Downtown',
         region: 'Meridian City',
         biome: 'DOWNTOWN GRID',
@@ -151,6 +152,7 @@ export const ROAD_TRACKS = [
     },
     {
         id: 'harbour_docks',
+        city: true,
         name: 'Saltgate Docks',
         region: 'Meridian City',
         biome: 'HARBOUR FRONT',
@@ -163,6 +165,7 @@ export const ROAD_TRACKS = [
     },
     {
         id: 'hillside_suburbs',
+        city: true,
         name: 'Larkhill Rise',
         region: 'Meridian City',
         biome: 'HILLSIDE SUBURBS',
@@ -175,6 +178,7 @@ export const ROAD_TRACKS = [
     },
     {
         id: 'industrial_zone',
+        city: true,
         name: 'Foundry Row',
         region: 'Meridian City',
         biome: 'INDUSTRIAL ZONE',
@@ -187,6 +191,7 @@ export const ROAD_TRACKS = [
     },
     {
         id: 'park_boulevard',
+        city: true,
         name: 'Elmwood Boulevard',
         region: 'Meridian City',
         biome: 'PARK BOULEVARD',
@@ -199,6 +204,7 @@ export const ROAD_TRACKS = [
     },
     {
         id: 'highway_ring',
+        city: true,
         name: 'Orbital Ring',
         region: 'Meridian City',
         biome: 'HIGHWAY RING',
