@@ -7,7 +7,8 @@ import { ROAD_TRACKS, ROAD_VEHICLES } from './roadRacing.js';
 export const TRACK_LENGTHS = {
     canyon_springs: 1033, coral_bay: 730, downtown_circuit: 1117, ember_crater: 1149, frost_harbor: 911,
     harbour_docks: 1156, highway_ring: 2176, hillside_suburbs: 1256, industrial_zone: 1303, jungle_falls: 692,
-    park_boulevard: 1262, rivet_factory: 971, rovers_rift: 1106, sunset_shores: 740
+    park_boulevard: 1262, rivet_factory: 971, rovers_rift: 1106, sunset_shores: 740,
+    crosstown_sprint: 3047, riverside_sprint: 2369
 };
 
 // How each kind of rival drives. `hunter` rivals go looking for the player, `block` rivals
@@ -128,6 +129,7 @@ export const CUP_POINTS = [10, 8, 6, 5, 4, 3, 2, 1, 0];
 export const CUPS = [
     { id: 'harbour', name: 'HARBOUR CUP', tier: 0, prize: 4000, tracks: ['harbour_docks', 'coral_bay', 'park_boulevard'], blurb: 'Three quick rounds by the water. A first trophy for a new name.' },
     { id: 'city-lights', name: 'CITY LIGHTS CUP', tier: 1, prize: 8000, tracks: ['downtown_circuit', 'industrial_zone', 'hillside_suburbs', 'park_boulevard'], blurb: 'Four rounds across the city districts.' },
+    { id: 'sprint', name: 'SPRINT SERIES', tier: 1, prize: 9000, tracks: ['riverside_sprint', 'highway_ring', 'crosstown_sprint'], blurb: 'Three long, fast rounds: two single-lap sprints across the city and the ring road between them.' },
     { id: 'highland', name: 'HIGHLAND CUP', tier: 2, prize: 13000, tracks: ['rovers_rift', 'canyon_springs', 'jungle_falls', 'frost_harbor'], blurb: 'Out of town, over the crests and off the ramps.' },
     { id: 'crown', name: 'CROWN SERIES', tier: 4, prize: 25000, tracks: ['highway_ring', 'ember_crater', 'rivet_factory', 'downtown_circuit', 'hillside_suburbs'], blurb: 'Five rounds against the best in the league.' }
 ];
@@ -181,7 +183,8 @@ const POLICE_UNITS = ['UNIT 7', 'UNIT 12', 'UNIT 31'].map((name, index) => ({
 export const TRACK_PAR = {
     canyon_springs: 24.2, coral_bay: 23.8, downtown_circuit: 29.4, ember_crater: 31.2, frost_harbor: 24.2,
     harbour_docks: 26.5, highway_ring: 35.7, hillside_suburbs: 31.5, industrial_zone: 34.1, jungle_falls: 28.9,
-    park_boulevard: 25.4, rivet_factory: 30.2, rovers_rift: 35.4, sunset_shores: 20.4
+    park_boulevard: 25.4, rivet_factory: 30.2, rovers_rift: 35.4, sunset_shores: 20.4,
+    crosstown_sprint: 63.1, riverside_sprint: 46.0
 };
 
 // Target times for a time trial, as [one star, two stars, three stars] in seconds. Par is a

@@ -42,7 +42,7 @@ takedown adds 30%. Engine and event sounds start after the first control input.
   and winning it puts the boss's machine in your garage.
 - **Event types:** circuit race, time trial, elimination, drift score, takedown
   hunt, boss duel, and police pursuit in the top two tiers.
-- **Tournaments:** four cups of three to five rounds, scored on points, with
+- **Tournaments:** five cups of three to five rounds, scored on points, with
   prize money for the top three.
 - **Quick Race:** any route, any owned vehicle.
 

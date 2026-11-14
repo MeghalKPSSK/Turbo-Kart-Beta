@@ -216,6 +216,32 @@ export const ROAD_TRACKS = [
         sky: '#7f8ea3'
     },
     {
+        id: 'crosstown_sprint',
+        city: true,
+        name: 'Crosstown Sprint',
+        region: 'Meridian City',
+        biome: 'CITY SPRINT',
+        grade: 'ADVANCED',
+        description: 'Three kilometres across the whole city in one lap. Eleven corners, none of them twice.',
+        laps: 1,
+        jumpProgress: [],
+        tone: '#f08a5d',
+        sky: '#7f8ea3'
+    },
+    {
+        id: 'riverside_sprint',
+        city: true,
+        name: 'Riverside Sprint',
+        region: 'Meridian City',
+        biome: 'PARKLAND SPRINT',
+        grade: 'INTERMEDIATE',
+        description: 'A single fast lap of sweeping bends through the riverside parks.',
+        laps: 1,
+        jumpProgress: [],
+        tone: '#5fbf9a',
+        sky: '#7f8ea3'
+    },
+    {
         id: 'rovers_rift',
         name: 'Highpoint Switchbacks',
         region: 'Kestrel Highlands',

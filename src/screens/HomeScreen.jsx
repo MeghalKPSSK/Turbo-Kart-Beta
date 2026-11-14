@@ -39,7 +39,7 @@ export default function HomeScreen({ profile, vehicle, paint, keys, onCareer, on
             </div>
             <div className="home-footer">
                 <div><span className="live-dot" /> CAREER OPEN</div>
-                <p>FIVE CREWS · THIRTY EVENTS · FOUR CUPS</p>
+                <p>FIVE CREWS · THIRTY EVENTS · FIVE CUPS</p>
                 <button onClick={onRecords}>RACE RECORDS ↗</button>
             </div>
         </section>

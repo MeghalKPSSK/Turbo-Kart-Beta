@@ -93,6 +93,22 @@ CITY_ROUTES = {
         "seed": 67, "radius": 90.0, "hills": 0.8, "floors": [(0.35, 6, 10), (0.4, 12, 20), (0.25, 22, 38)],
         "facades": ["Glass", "Glass", "Concrete"], "lot": (26, 44), "tree_gap": 34, "towers": 60,
     },
+    # Sprints: one long lap that crosses the city and never repeats a corner.
+    "crosstown_sprint": {
+        "corners": [(-520, -200), (-200, -260), (120, -180), (420, -260), (560, -60), (380, 120),
+                    (480, 300), (160, 340), (-80, 220), (-340, 320), (-560, 140)],
+        "start_edge": 0,
+        "parks": [(2, 1), (5, -1), (8, 1), (10, -1)],
+        "seed": 71, "radius": 55.0, "hills": 1.4, "towers": 40,
+    },
+    "riverside_sprint": {
+        "corners": [(-420, -120), (-140, -220), (180, -140), (440, -200), (520, 40), (260, 160),
+                    (-40, 100), (-300, 200), (-500, 60)],
+        "start_edge": 0,
+        "parks": [(0, 1), (1, 1), (2, 1), (4, 1), (6, 1), (7, 1), (3, -1), (8, -1)],
+        "seed": 83, "radius": 80.0, "hills": 1.8, "floors": [(0.7, 3, 6), (0.3, 7, 11)],
+        "facades": ["Plaster", "Brick", "Plaster", "Glass"], "tree_gap": 16, "towers": 24,
+    },
 }
 
 HILLS = 1.0

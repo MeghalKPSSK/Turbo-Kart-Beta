@@ -310,10 +310,57 @@ export class RoadRaceGame {
                 police: Boolean(rival?.police), eliminated: false, eliminatedAt: null, beacon: null
             };
             if (racer.police) racer.beacon = this.addBeacon(visual, vehicleInfo);
+            if (info.city) racer.lights = this.addLights(visual, vehicleInfo);
             this.racers.push(racer);
             if (isPlayer) this.player = racer;
             else aiIndex += 1;
         }
+    }
+
+    // Headlights, a pool of light on the road ahead and a tail light, for the dusk city routes.
+    // The tail light brightens under braking (see updateVisuals).
+    addLights(visual, vehicleInfo) {
+        const bike = vehicleInfo.type === 'BIKE';
+        const front = bike ? 1.18 : 2.18;
+        const rear = bike ? -1.2 : -1.9;
+        const lamp = (color, intensity, x, y, z, width) => {
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, 0.09, 0.06),
+                new THREE.MeshStandardMaterial({ color: 0x111111, emissive: color, emissiveIntensity: intensity }));
+            mesh.position.set(x, y, z);
+            visual.lean.add(mesh);
+            return mesh;
+        };
+        if (bike) lamp(0xfff1d6, 7, 0, 1.02, front, 0.2);
+        else for (const side of [0.5, -0.5]) lamp(0xfff1d6, 7, side, 0.58, front, 0.26);
+        const tail = bike ? [lamp(0xff2418, 3, 0, 0.98, rear, 0.18)] : [lamp(0xff2418, 3, 0, 0.72, rear, 0.9)];
+        const pool = new THREE.Mesh(new THREE.PlaneGeometry(bike ? 4.5 : 6.5, 11), this.headlightMaterial());
+        pool.rotation.x = -Math.PI / 2;
+        pool.position.set(0, 0.09, front + 5.6);
+        pool.renderOrder = 2;
+        visual.root.add(pool);
+        return { tail, pool };
+    }
+
+    // One shared material for every headlight pool: a soft additive glow on the asphalt.
+    headlightMaterial() {
+        if (!this.headlightPool) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            const glow = ctx.createRadialGradient(32, 104, 0, 32, 70, 82);
+            glow.addColorStop(0, 'rgba(255, 240, 210, 0.9)');
+            glow.addColorStop(0.5, 'rgba(255, 232, 196, 0.3)');
+            glow.addColorStop(1, 'rgba(255, 230, 190, 0)');
+            ctx.fillStyle = glow;
+            ctx.fillRect(0, 0, 64, 128);
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.colorSpace = THREE.SRGBColorSpace;
+            this.headlightPool = new THREE.MeshBasicMaterial({
+                map: texture, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false,
+                polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5
+            });
+        }
+        return this.headlightPool;
     }
 
     // Red and blue roof lights for a pursuit unit; updateVisuals flashes them.
@@ -907,6 +954,11 @@ export class RoadRaceGame {
             updateVehicleVisual(visual, vehicle, dt || 0.016);
             // Ghost cars (just respawned) blink so they read as intangible.
             visual.root.visible = !racer.eliminated && (vehicle.ghostTimer <= 0 || Math.floor(time * 12) % 2 === 0);
+            if (racer.lights) {
+                const glow = vehicle.braking ? 14 : 3;
+                for (const light of racer.lights.tail) light.material.emissiveIntensity = glow;
+                racer.lights.pool.visible = !vehicle.airborne && vehicle.mode === 'ok';
+            }
             if (racer.beacon) {
                 const phase = Math.floor(time * 6) % 2;
                 racer.beacon[0].material.emissiveIntensity = phase ? 9 : 0.2;
@@ -1074,6 +1126,7 @@ export class RoadRaceGame {
         safely('smoke', () => this.smoke?.dispose());
         safely('skid marks', () => this.skids?.dispose());
         safely('glow texture', () => this.glow?.dispose());
+        safely('headlights', () => { this.headlightPool?.map.dispose(); this.headlightPool?.dispose(); });
         safely('city look', () => this.look?.dispose());
         safely('physics', () => this.physics?.dispose());
         safely('environment', () => this.environment?.dispose());

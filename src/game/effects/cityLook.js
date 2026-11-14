@@ -217,9 +217,10 @@ async function buildMaterials(anisotropy) {
 
 // Instanced trees in a grid of chunks. Each chunk has a detailed and a light version of its
 // trees; only chunks near the camera draw the detailed one.
+const TREE_SPECIES = ['tree_island', 'tree_round', 'tree_tall'];
 const CHUNK = 90;
-const NEAR = 65;
-const FAR = 520;
+const NEAR = 48;
+const FAR = 380;
 
 function treeParts(model) {
     model.updateMatrixWorld(true);
@@ -238,16 +239,22 @@ function treeParts(model) {
     return parts;
 }
 
-function plantTrees(scene, trees, near, far, { shadows, detailed }) {
+// Which species each tree is: a fixed mix, so a route looks the same on every visit.
+// Indexes into TREE_SPECIES: mostly the round street tree, with tall and wind-shaped ones between.
+const SPECIES_MIX = [1, 2, 1, 0, 1, 2, 0, 1, 2, 1];
+
+function plantTrees(scene, trees, species, { shadows, detailed }) {
     const chunks = new Map();
-    for (const tree of trees) {
-        const key = `${Math.floor(tree.position[0] / CHUNK)},${Math.floor(tree.position[2] / CHUNK)}`;
-        if (!chunks.has(key)) chunks.set(key, []);
-        chunks.get(key).push(tree);
-    }
+    trees.forEach((tree, index) => {
+        const kind = SPECIES_MIX[Math.abs(index * 7 + Math.floor(tree.position[0])) % SPECIES_MIX.length];
+        const key = `${kind}:${Math.floor(tree.position[0] / CHUNK)},${Math.floor(tree.position[2] / CHUNK)}`;
+        if (!chunks.has(key)) chunks.set(key, { kind, list: [] });
+        chunks.get(key).list.push(tree);
+    });
     const dummy = new THREE.Object3D();
     const groups = [];
-    for (const list of chunks.values()) {
+    for (const { kind, list } of chunks.values()) {
+        const { near, far } = species[kind];
         const centre = new THREE.Vector3();
         for (const tree of list) centre.add(new THREE.Vector3(...tree.position));
         centre.divideScalar(list.length);
@@ -290,19 +297,18 @@ function plantTrees(scene, trees, near, far, { shadows, detailed }) {
                     for (const mesh of item.children) mesh.dispose();
                 }
             }
-            for (const part of [...near, ...far]) { part.geometry.dispose(); part.material.dispose(); }
+            for (const { near, far } of species) for (const part of [...near, ...far]) { part.geometry.dispose(); part.material.dispose(); }
         }
     };
 }
 
 export async function createCityLook({ renderer, scene, camera, trackScene, meta, quality, sun, hemisphere, fill }) {
     const anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-    const [materials, environment, backdrop, nearModel, farModel] = await Promise.all([
+    const [materials, environment, backdrop, ...treeModels] = await Promise.all([
         buildMaterials(anisotropy),
         once('sky:hdr', () => new RGBELoader().loadAsync(`${BASE}sky/dusk_1k.hdr`)),
         once('sky:jpg', () => new THREE.ImageLoader().loadAsync(`${BASE}sky/dusk_4k.jpg`)),
-        loadModel('tree_island'),
-        loadModel('tree_island_far')
+        ...TREE_SPECIES.flatMap((name) => [loadModel(name), loadModel(`${name}_far`)])
     ]);
 
     // Dress the model: swap each exported placeholder for its real material by name.
@@ -347,7 +353,8 @@ export async function createCityLook({ renderer, scene, camera, trackScene, meta
     fill.color.set(0x8fb0e0);
     fill.intensity = 0.35;
 
-    const trees = plantTrees(scene, meta.trees || [], treeParts(nearModel), treeParts(farModel),
+    const species = TREE_SPECIES.map((_, index) => ({ near: treeParts(treeModels[index * 2]), far: treeParts(treeModels[index * 2 + 1]) }));
+    const trees = plantTrees(scene, meta.trees || [], species,
         { shadows: quality.shadows > 0, detailed: quality.particles >= 0.8 });
 
     // Bloom makes the lamps and lit windows glow. It needs its own multisampled target.

@@ -34,7 +34,7 @@ TEXTURES = {
 }
 TEXTURE_MAPS = {"diff": "Diffuse", "nor_gl": "nor_gl", "rough": "Rough"}
 SKY = "learner_park"
-TREES = ["island_tree_02"]
+TREES = ["island_tree_02", "island_tree_01", "jacaranda_tree"]
 
 
 def fetch_json(url):
