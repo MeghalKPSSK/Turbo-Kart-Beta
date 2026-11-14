@@ -227,7 +227,9 @@ export class AIDriver {
         const actual = this.tracker.lane;
         const horizon = clamp(25 + Math.abs(speed) * 1.7, 45, 125);
         let best = null;
-        for (const hazard of track.hazards) {
+        // Fixed hazards and moving traffic (track.traffic is kept current by TrafficSystem).
+        const obstacles = track.traffic?.length ? [...track.hazards, ...track.traffic] : track.hazards;
+        for (const hazard of obstacles) {
             const ahead = track.wrapS(hazard.s - s);
             const passed = ahead > track.length - 6;
             if (passed || ahead > horizon) {
@@ -253,7 +255,8 @@ export class AIDriver {
     // True when a hazard lies within `range` metres ahead of (or just beside) route distance `s`.
     nearHazard(s, range) {
         const track = this.track;
-        return track.hazards.some((hazard) => {
+        const obstacles = track.traffic?.length ? [...track.hazards, ...track.traffic] : track.hazards;
+        return obstacles.some((hazard) => {
             const d = wrapDelta(hazard.s - s, track.length);
             return d > -6 && d < range;
         });

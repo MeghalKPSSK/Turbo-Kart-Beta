@@ -46,6 +46,12 @@ takedown adds 30%. Engine and event sounds start after the first control input.
   prize money for the top three.
 - **Quick Race:** any route, any owned vehicle.
 
+The obstacles on every route are other vehicles: traffic driving in lane, slower
+than the race, and stalled vehicles with their hazard lights on. A hard hit knocks
+a traffic vehicle out of its lane. Time trials run on an empty road. Resetting to
+the track (R) puts you back where you were with your laps intact; you only lose
+the places of rivals who pass while you recover.
+
 Credits are the only currency. Races, new stars and cups pay them out; they buy
 vehicles and per-vehicle upgrades (top speed, acceleration, handling, nitro,
 armour) in the garage. Progress is saved in the browser.

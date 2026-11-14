@@ -35,6 +35,22 @@ export class ProgressTracker {
         this.offRoadTime = 0;
     }
 
+    // The car has been put somewhere else on the road (a reset, a recovery or a respawn): find
+    // it again without losing the laps it has completed. reset() is only for the start grid.
+    relocate() {
+        const v = this.vehicle;
+        const previous = this.total;
+        this.track.project(v.position.x, v.position.z, -1, this.proj);
+        this.hint = this.proj.index;
+        this.s = this.proj.s;
+        this.lane = this.proj.lane;
+        this.index = this.proj.index;
+        this.lapOffset = Math.round((previous - this.s) / this.track.length);
+        this.total = this.lapOffset * this.track.length + this.s;
+        this.wrongWayTime = 0;
+        this.offRoadTime = 0;
+    }
+
     update(dt) {
         const track = this.track;
         const v = this.vehicle;

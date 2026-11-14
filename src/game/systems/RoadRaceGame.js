@@ -18,6 +18,7 @@ import { NitroEffect, glowTexture } from '../effects/nitroFx.js';
 import { SkidMarks } from '../effects/skidMarks.js';
 import { GameAudio } from '../audio/gameAudio.js';
 import { createCityLook } from '../effects/cityLook.js';
+import { TrafficSystem, stalledVehicles } from './traffic.js';
 
 const loader = new GLTFLoader();
 const modelBase = `${import.meta.env.BASE_URL || '/'}models/blender/`;
@@ -163,6 +164,10 @@ export class RoadRaceGame {
         if (!meta.route || meta.version < 2) throw new Error(`${info.name} needs its Blender track data rebuilt.`);
 
         this.vehicleAssets = new Map(vehicleAssets);
+        // The obstacles are vehicles: the track's fixed hazards become stalled cars (none in a
+        // time trial, which promises an empty road) and moving traffic is added below.
+        const emptyRoad = this.event?.type === 'timeTrial';
+        meta.hazards = emptyRoad ? [] : stalledVehicles(meta.hazards);
         this.model = new TrackModel(meta);
         this.track = this.model;
         this.trackScene = trackScene.clone(true);
@@ -176,6 +181,8 @@ export class RoadRaceGame {
         const shadows = this.quality.shadows > 0;
         this.trackScene.traverse((child) => {
             if (!child.isMesh) return;
+            // The crates, rocks and barriers baked into the model are replaced by vehicles.
+            if (/_Hazard_/.test(child.material?.name || child.name)) { child.visible = false; return; }
             child.castShadow = shadows;
             child.receiveShadow = shadows;
         });
@@ -206,6 +213,10 @@ export class RoadRaceGame {
         this.nitroPickups = new NitroPickups(this.scene, this.model, this.glow);
         this.cameraRig = new CameraRig(this.camera);
 
+        this.traffic = new TrafficSystem(this.scene, this.physics, this.model, {
+            count: emptyRoad ? 0 : Math.max(4, Math.min(16, Math.round(this.model.length / 150 * this.quality.particles))),
+            seed: this.model.count, shadows, moving: !emptyRoad
+        });
         this.createRacers();
         for (let i = 0; i < 90; i += 1) this.physics.step(); // let the grid settle on its suspension
         for (const racer of this.racers) racer.tracker.reset();
@@ -310,19 +321,21 @@ export class RoadRaceGame {
                 police: Boolean(rival?.police), eliminated: false, eliminatedAt: null, beacon: null
             };
             if (racer.police) racer.beacon = this.addBeacon(visual, vehicleInfo);
-            if (info.city) racer.lights = this.addLights(visual, vehicleInfo);
+            if (info.city) racer.lights = this.addLights(visual, vehicleInfo, isPlayer);
             this.racers.push(racer);
             if (isPlayer) this.player = racer;
             else aiIndex += 1;
         }
     }
 
-    // Headlights, a pool of light on the road ahead and a tail light, for the dusk city routes.
+    // Headlamps and a tail light for the dusk city routes. The player's machine also carries a
+    // real spotlight, so its beam falls on the road, walls and traffic the way a headlight does.
     // The tail light brightens under braking (see updateVisuals).
-    addLights(visual, vehicleInfo) {
+    addLights(visual, vehicleInfo, isPlayer) {
         const bike = vehicleInfo.type === 'BIKE';
         const front = bike ? 1.18 : 2.18;
         const rear = bike ? -1.2 : -1.9;
+        const height = bike ? 1.02 : 0.58;
         const lamp = (color, intensity, x, y, z, width) => {
             const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, 0.09, 0.06),
                 new THREE.MeshStandardMaterial({ color: 0x111111, emissive: color, emissiveIntensity: intensity }));
@@ -330,37 +343,17 @@ export class RoadRaceGame {
             visual.lean.add(mesh);
             return mesh;
         };
-        if (bike) lamp(0xfff1d6, 7, 0, 1.02, front, 0.2);
-        else for (const side of [0.5, -0.5]) lamp(0xfff1d6, 7, side, 0.58, front, 0.26);
+        if (bike) lamp(0xfff1d6, 3.5, 0, height, front, 0.2);
+        else for (const side of [0.5, -0.5]) lamp(0xfff1d6, 3.5, side, height, front, 0.26);
         const tail = bike ? [lamp(0xff2418, 3, 0, 0.98, rear, 0.18)] : [lamp(0xff2418, 3, 0, 0.72, rear, 0.9)];
-        const pool = new THREE.Mesh(new THREE.PlaneGeometry(bike ? 4.5 : 6.5, 11), this.headlightMaterial());
-        pool.rotation.x = -Math.PI / 2;
-        pool.position.set(0, 0.09, front + 5.6);
-        pool.renderOrder = 2;
-        visual.root.add(pool);
-        return { tail, pool };
-    }
-
-    // One shared material for every headlight pool: a soft additive glow on the asphalt.
-    headlightMaterial() {
-        if (!this.headlightPool) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 64; canvas.height = 128;
-            const ctx = canvas.getContext('2d');
-            const glow = ctx.createRadialGradient(32, 104, 0, 32, 70, 82);
-            glow.addColorStop(0, 'rgba(255, 240, 210, 0.9)');
-            glow.addColorStop(0.5, 'rgba(255, 232, 196, 0.3)');
-            glow.addColorStop(1, 'rgba(255, 230, 190, 0)');
-            ctx.fillStyle = glow;
-            ctx.fillRect(0, 0, 64, 128);
-            const texture = new THREE.CanvasTexture(canvas);
-            texture.colorSpace = THREE.SRGBColorSpace;
-            this.headlightPool = new THREE.MeshBasicMaterial({
-                map: texture, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false,
-                polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5
-            });
+        let beam = null;
+        if (isPlayer) {
+            beam = new THREE.SpotLight(0xfff0d8, 260, 90, 0.5, 0.9, 1.5);
+            beam.position.set(0, height + 0.15, front);
+            beam.target.position.set(0, -0.4, front + 30);
+            visual.lean.add(beam, beam.target);
         }
-        return this.headlightPool;
+        return { tail, beam };
     }
 
     // Red and blue roof lights for a pursuit unit; updateVisuals flashes them.
@@ -469,7 +462,7 @@ export class RoadRaceGame {
         const racer = this.player;
         const { vehicle, tracker } = racer;
         placeOnRoad(this.model, vehicle, tracker.s + 2, Math.max(-6, Math.min(6, tracker.lane)), 0, { ghost: 2.2 });
-        tracker.reset();
+        tracker.relocate();
         this.showToast('BACK ON TRACK', 'info', 1.2);
     }
 
@@ -523,6 +516,8 @@ export class RoadRaceGame {
     fixedStep() {
         this.stepCount += 1;
         if (this.stepCount % 2 === 0) this.updateControllers(FIXED_DT * 2);
+        // Traffic waits for the green light with everyone else.
+        if (this.started) this.traffic.step(FIXED_DT, this.player.tracker.s, this.racers);
         this.physics.step();
     }
 
@@ -578,7 +573,7 @@ export class RoadRaceGame {
             if (needsRecovery(vehicle)) {
                 if (vehicle.invalid && import.meta.env.DEV) console.warn(`[physics] ${racer.id} had a non-finite or disabled body; repaired`);
                 recoverVehicle(this.model, tracker, vehicle);
-                tracker.reset();
+                tracker.relocate();
                 if (racer.isPlayer) this.showToast('BACK IN THE RACE', 'info', 1.2);
             }
             const stranded = tracker.offRoadTime > 3 || vehicle.flippedTime > 2.2;
@@ -591,7 +586,7 @@ export class RoadRaceGame {
             } else if (racer.driver.needsRespawn || stranded) {
                 racer.driver.needsRespawn = false;
                 placeOnRoad(this.model, vehicle, tracker.s + 6, 0, 18);
-                tracker.reset();
+                tracker.relocate();
             }
         }
     }
@@ -676,6 +671,11 @@ export class RoadRaceGame {
                     this.damageFlash = Math.min(1, this.damageFlash + ev.severity * 0.7);
                     if (ev.severity > 0.35) this.audio.impact(ev.severity); else this.audio.scrape();
                     if (ev.type === 'hazard') this.showToast(`${ev.hazard?.style ? ev.hazard.style.toUpperCase() : 'OBSTACLE'} HIT`, 'bad', 1.2);
+                }
+                // A hard hit sends a moving traffic vehicle spinning out of its lane.
+                if (ev.hazard?.style === 'traffic' && ev.impulseSpeed > 5) {
+                    this.traffic.knock(ev.hazard, v.velocity);
+                    this.sparks(ev.hazard.group.position.x, ev.hazard.group.position.y + 0.8, ev.hazard.group.position.z, { x: 0, y: 0.5, z: 0 }, 18, 1.2);
                 }
             } else if (ev.type === 'vehicle') {
                 const involvesPlayer = ev.a === this.player.vehicle || ev.b === this.player.vehicle;
@@ -957,7 +957,7 @@ export class RoadRaceGame {
             if (racer.lights) {
                 const glow = vehicle.braking ? 14 : 3;
                 for (const light of racer.lights.tail) light.material.emissiveIntensity = glow;
-                racer.lights.pool.visible = !vehicle.airborne && vehicle.mode === 'ok';
+                if (racer.lights.beam) racer.lights.beam.visible = vehicle.mode === 'ok';
             }
             if (racer.beacon) {
                 const phase = Math.floor(time * 6) % 2;
@@ -976,6 +976,7 @@ export class RoadRaceGame {
         const nitro = p.nitroFx.intensity;
         this.cameraRig.update(dt || 0.016, p.vehicle, p.pos, { nitro, speedRatio });
         this.look?.update();
+        this.traffic.update(dt);
         if (dt > 0) {
             this.particles.update(dt, this.camera, this.renderer.domElement.clientHeight);
             this.smoke.update(dt, this.camera, this.renderer.domElement.clientHeight);
@@ -1126,7 +1127,7 @@ export class RoadRaceGame {
         safely('smoke', () => this.smoke?.dispose());
         safely('skid marks', () => this.skids?.dispose());
         safely('glow texture', () => this.glow?.dispose());
-        safely('headlights', () => { this.headlightPool?.map.dispose(); this.headlightPool?.dispose(); });
+        safely('traffic', () => this.traffic?.dispose());
         safely('city look', () => this.look?.dispose());
         safely('physics', () => this.physics?.dispose());
         safely('environment', () => this.environment?.dispose());
