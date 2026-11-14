@@ -55,7 +55,8 @@ export function useRaceInput({ active, running, gameRef, keys, onPause }) {
             const action = lookup[keyId(event)];
             if (!action) return;
             // Stop the page scrolling on arrows and space while racing.
-            if (event.key.startsWith('Arrow') || event.key === ' ') event.preventDefault();
+            // Also stop Control shortcuts (save, bookmark, select all) firing while it is held for nitro.
+            if (event.key.startsWith('Arrow') || event.key === ' ' || event.ctrlKey) event.preventDefault();
             if (event.repeat) return;
             if (HELD_ACTIONS.includes(action)) setHeld('key', action, true);
             else if (action === 'reset') trigger('reset');

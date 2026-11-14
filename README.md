@@ -23,8 +23,8 @@ Open the local address Vite prints.
 | Accelerate | W or Up | Right trigger | GAS |
 | Brake, then reverse | S or Down | Left trigger | BRAKE |
 | Steer | A / D or Left / Right | Left stick or d-pad | Arrow buttons |
-| Nitro | Shift | A | NITRO |
-| Drift (while steering) | Space | X or right bumper | DRIFT |
+| Nitro | Space or Ctrl | A | NITRO |
+| Handbrake drift (while steering) | Shift | X or right bumper | DRIFT |
 | Reset to the track | R | Y | RESET |
 | Pause | Esc | Start | Pause button |
 

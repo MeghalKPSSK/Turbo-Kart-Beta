@@ -40,7 +40,7 @@ function NitroBar({ value, active }) {
     );
 }
 
-const HINTS = [['accelerate', 'ACCEL'], ['brake', 'BRAKE / REVERSE'], ['left', 'LEFT'], ['right', 'RIGHT'], ['boost', 'NITRO'], ['drift', 'DRIFT'], ['reset', 'RESET']];
+const HINTS = [['accelerate', 'ACCEL'], ['brake', 'BRAKE / REVERSE'], ['left', 'LEFT'], ['right', 'RIGHT'], ['boost', 'NITRO'], ['drift', 'HANDBRAKE'], ['reset', 'RESET']];
 
 function RaceHUD({ hud, vehicle, eventLabel, eventTitle, minimapPath, keys, showKeys = true, onPause }) {
     const rows = hud.leaderboard || [];

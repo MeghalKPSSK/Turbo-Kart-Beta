@@ -1,6 +1,8 @@
 // Player settings: volume, graphics quality, touch controls and key bindings.
 
 const SETTINGS_KEY = 'turbo-road-league-settings-v1';
+// Bumped when the default keys change, so saved defaults follow and custom keys are kept.
+const KEYS_VERSION = 2;
 
 export const ACTIONS = [
     { id: 'accelerate', label: 'Accelerate' },
@@ -8,7 +10,7 @@ export const ACTIONS = [
     { id: 'left', label: 'Steer left' },
     { id: 'right', label: 'Steer right' },
     { id: 'boost', label: 'Nitro' },
-    { id: 'drift', label: 'Drift' },
+    { id: 'drift', label: 'Handbrake (drift)' },
     { id: 'reset', label: 'Reset to track' },
     { id: 'pause', label: 'Pause' }
 ];
@@ -21,8 +23,10 @@ export const DEFAULT_KEYS = {
     brake: ['s', 'ArrowDown'],
     left: ['a', 'ArrowLeft'],
     right: ['d', 'ArrowRight'],
-    boost: ['Shift'],
-    drift: [' '],
+    // Nitro is Space or Control. Command is deliberately not offered: browsers reserve
+    // Command+W (close tab) and stop reporting other key releases while it is held.
+    boost: [' ', 'Control'],
+    drift: ['Shift'],
     reset: ['r'],
     pause: ['Escape']
 };
@@ -44,6 +48,17 @@ const cloneKeys = (keys) => Object.fromEntries(ACTIONS.map(({ id }) => [id, [...
 
 export const defaultSettings = () => ({ volume: 0.8, quality: 'high', touch: 'auto', assist: true, keys: cloneKeys(DEFAULT_KEYS) });
 
+// Version 1 defaults were Shift = nitro and Space = drift. A save that still has exactly those
+// moves to the new defaults; anything the player rebound is left alone.
+function migrateKeys(stored) {
+    const keys = cloneKeys(stored.keys);
+    if ((stored.keysVersion || 1) < 2 && keys.boost.join() === 'Shift' && keys.drift.join() === ' ') {
+        keys.boost = [...DEFAULT_KEYS.boost];
+        keys.drift = [...DEFAULT_KEYS.drift];
+    }
+    return keys;
+}
+
 export function loadSettings() {
     try {
         const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -54,7 +69,7 @@ export function loadSettings() {
                 quality: QUALITY_LEVELS[stored.quality] ? stored.quality : base.quality,
                 touch: TOUCH_MODES[stored.touch] ? stored.touch : base.touch,
                 assist: stored.assist !== false,
-                keys: cloneKeys(stored.keys)
+                keys: migrateKeys(stored)
             };
         }
     } catch {
@@ -65,7 +80,7 @@ export function loadSettings() {
 
 export function saveSettings(settings) {
     try {
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...settings, keysVersion: KEYS_VERSION }));
     } catch {
         // Storage can be blocked; settings then last for this visit only.
     }
@@ -78,6 +93,8 @@ export function keyLabel(key) {
     if (key === ' ') return 'SPACE';
     if (key.startsWith('Arrow')) return { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' }[key];
     if (key === 'Escape') return 'ESC';
+    if (key === 'Control') return 'CTRL';
+    if (key === 'Meta') return 'CMD';
     return key.toUpperCase();
 }
 
