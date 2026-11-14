@@ -200,12 +200,14 @@ export class TrafficSystem {
                 id: `traffic_${index}`, style: 'traffic', kind, size, group, body, collider,
                 s: 0, lane: LANES[(index * 3 + 1) % LANES.length], speed: 0,
                 cruise: (kind === 'bus' || kind === 'truck' ? 19 : 23) + this.random() * 7,
-                mode: 'driving', timer: 0, half: [size.width / 2, size.height / 2, size.length / 2]
+                mode: 'driving', timer: 0, half: [size.width / 2, size.height / 2, size.length / 2],
+                target: 0
             };
             // Spread round the lap, keeping the start grid and the first corner clear.
             const usable = track.length - 260;
             entry.s = track.wrapS(140 + (usable * (index + 0.5 + (this.random() - 0.5) * 0.5)) / count);
             entry.speed = entry.cruise;
+            entry.target = entry.lane;
             physics.owners.set(collider.handle, { type: 'hazard', hazard: entry });
             this.vehicles.push(entry);
             this.pose(entry, true);
@@ -236,14 +238,43 @@ export class TrafficSystem {
                 if (entry.timer <= 0) this.rejoin(entry, playerS);
                 continue;
             }
-            // Follow the vehicle ahead in the same lane rather than driving through it.
+            // Read the road ahead in this lane: a stalled vehicle or slower traffic.
+            const reach = entry.size.length / 2;
+            const sameLane = (lane, other) => Math.abs(other - lane) < 2.5;
+            const blockedBy = (lane) => {
+                let nearest = Infinity;
+                let speed = 0;
+                for (const hazard of track.hazards) {
+                    const gap = track.wrapS(hazard.s - entry.s);
+                    if (gap < 60 && Math.abs(hazard.lane - lane) < hazard.half[0] + entry.size.width / 2 + 0.6 && gap < nearest) { nearest = gap; speed = 0; }
+                }
+                for (const other of this.vehicles) {
+                    if (other === entry || other.mode !== 'driving' || !sameLane(lane, other.lane)) continue;
+                    const gap = track.wrapS(other.s - entry.s);
+                    const behind = track.wrapS(entry.s - other.s);
+                    // A vehicle alongside or just behind also makes a lane unusable.
+                    if (lane !== entry.target && behind < 16) return { gap: 0, speed: other.speed };
+                    if (gap < 55 && gap < nearest) { nearest = gap; speed = other.speed; }
+                }
+                return nearest === Infinity ? null : { gap: nearest, speed };
+            };
             let limit = entry.cruise;
-            for (const other of this.vehicles) {
-                if (other === entry || other.mode !== 'driving' || other.lane !== entry.lane) continue;
-                const gap = track.wrapS(other.s - entry.s);
-                if (gap < 9 + entry.size.length / 2 + other.size.length / 2) limit = Math.min(limit, other.speed * 0.9);
-                else if (gap < 30) limit = Math.min(limit, other.speed);
+            const ahead = blockedBy(entry.target);
+            if (ahead && ahead.speed < entry.cruise - 1.5 && ahead.gap < 48) {
+                // Pull out and overtake if a neighbouring lane is clear, as a driver would.
+                const index = LANES.indexOf(entry.target);
+                const choice = [index - 1, index + 1].filter((i) => i >= 0 && i < LANES.length)
+                    .map((i) => LANES[i]).find((lane) => !blockedBy(lane));
+                if (choice !== undefined && entry.lane === entry.target) entry.target = choice;
             }
+            // Otherwise follow at a safe distance, or stop behind a stalled vehicle.
+            const now = blockedBy(entry.target);
+            if (now) {
+                if (now.gap < 9 + reach * 2) limit = Math.min(limit, now.speed * 0.9);
+                else if (now.gap < 30) limit = Math.min(limit, Math.max(now.speed, 3));
+            }
+            // Change lane smoothly: about one lane width every three seconds.
+            entry.lane += Math.max(-2.2 * dt, Math.min(2.2 * dt, entry.target - entry.lane));
             for (const racer of racers) {
                 if (racer.eliminated || Math.abs(racer.tracker.lane - entry.lane) > 2.6) continue;
                 const gap = track.wrapS(racer.tracker.s - entry.s);
@@ -278,12 +309,13 @@ export class TrafficSystem {
         // Well ahead of the player, and not on top of another vehicle in the same lane.
         let s = this.track.wrapS(playerS + 260 + this.random() * 220);
         for (let attempt = 0; attempt < 8; attempt += 1) {
-            const clear = this.vehicles.every((other) => other === entry || other.mode !== 'driving' || other.lane !== entry.lane
+            const clear = this.vehicles.every((other) => other === entry || other.mode !== 'driving' || Math.abs(other.lane - entry.lane) > 2.5
                 || Math.min(this.track.wrapS(other.s - s), this.track.wrapS(s - other.s)) > 30);
             if (clear) break;
             s = this.track.wrapS(s + 45);
         }
         entry.s = s;
+        entry.lane = entry.target;
         this.pose(entry, true);
     }
 

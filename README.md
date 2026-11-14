@@ -52,6 +52,10 @@ a traffic vehicle out of its lane. Time trials run on an empty road. Resetting t
 the track (R) puts you back where you were with your laps intact; you only lose
 the places of rivals who pass while you recover.
 
+A wrecked bike breaks apart and a wrecked car is thrown over and burns; both
+rejoin a moment later. Brake assist (on by default, under Settings) slows you
+when you arrive far too fast for a corner.
+
 Credits are the only currency. Races, new stars and cups pay them out; they buy
 vehicles and per-vehicle upgrades (top speed, acceleration, handling, nitro,
 armour) in the garage. Progress is saved in the browser.

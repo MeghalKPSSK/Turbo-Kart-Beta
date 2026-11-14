@@ -19,6 +19,8 @@ import { SkidMarks } from '../effects/skidMarks.js';
 import { GameAudio } from '../audio/gameAudio.js';
 import { createCityLook } from '../effects/cityLook.js';
 import { TrafficSystem, stalledVehicles } from './traffic.js';
+import { WreckFx } from '../effects/wreckFx.js';
+import { buildAssist } from '../physics/assist.js';
 
 const loader = new GLTFLoader();
 const modelBase = `${import.meta.env.BASE_URL || '/'}models/blender/`;
@@ -77,17 +79,11 @@ function extractRoadGeometry(root) {
 }
 
 const PLAYER_GRID_SLOT = 6;
-// Barrel-roll visuals: roll axis, pivot height above the road (m) and scratch objects.
 const DAY_SUN_OFFSET = new THREE.Vector3(-110, 180, 70);
-const TRICK_AXIS = new THREE.Vector3(0, 0, 1);
-const TRICK_PIVOT_HEIGHT = 1.02;
-const TRICK_QUAT = new THREE.Quaternion();
-const TRICK_UP = new THREE.Vector3();
-const TRICK_UP2 = new THREE.Vector3();
 const NITRO_PICKUP_GAIN = 0.35;
 
 export class RoadRaceGame {
-    constructor(container, { track, vehicle, paint, upgrades, event = null, quality, volume = 1, onReady, onHUD, onFinish, onError }) {
+    constructor(container, { track, vehicle, paint, upgrades, event = null, quality, volume = 1, assist = true, onReady, onHUD, onFinish, onError }) {
         this.container = container;
         this.trackInfo = track;
         this.vehicleInfo = vehicle;
@@ -96,6 +92,9 @@ export class RoadRaceGame {
         // Career event rules (see data/career.js eventRace). null is a plain race against the default field.
         this.event = event;
         this.driftPoints = 0;
+        // Brake assist for the player (a setting): see physics/assist.js.
+        this.assistOn = assist;
+        this.assist = null;
         this.wrecks = 0;
         this.busted = false;
         this.timedOut = false;
@@ -135,7 +134,6 @@ export class RoadRaceGame {
         this.bestLap = null;
         this.lapStart = 0;
         this.driftScore = 0;
-        this.trick = { roll: 0, direction: 0, active: false };
         this.damageFlash = 0;
         this.autopilot = null;
         this.eventLog = [];
@@ -209,6 +207,7 @@ export class RoadRaceGame {
         this.particles = new ParticlePool(this.scene, { max: Math.round(1600 * this.quality.particles), additive: true });
         this.smoke = new ParticlePool(this.scene, { max: Math.round(900 * this.quality.particles), additive: false });
         this.skids = new SkidMarks(this.scene);
+        this.wreckFx = new WreckFx(this.scene, { gravity: this.model.gravity });
         this.coinField = coinTemplate ? new CoinField(this.scene, this.model, coinTemplate) : null;
         this.nitroPickups = new NitroPickups(this.scene, this.model, this.glow);
         this.cameraRig = new CameraRig(this.camera);
@@ -318,7 +317,8 @@ export class RoadRaceGame {
                 lap: 1, finished: false, finishTime: null, lastLapTime: 0, laps: [], rank: slot + 1,
                 pos: new THREE.Vector3(), quat: new THREE.Quaternion(),
                 smokeTimer: 0, wasWrecked: false, crew: isPlayer ? 'YOU' : rival.crew,
-                police: Boolean(rival?.police), eliminated: false, eliminatedAt: null, beacon: null
+                police: Boolean(rival?.police), eliminated: false, eliminatedAt: null, beacon: null,
+                paint: isPlayer ? this.paint : rival.paint, shattered: false, burning: 0
             };
             if (racer.police) racer.beacon = this.addBeacon(visual, vehicleInfo);
             if (info.city) racer.lights = this.addLights(visual, vehicleInfo, isPlayer);
@@ -536,6 +536,13 @@ export class RoadRaceGame {
                 input.throttle = live ? Math.max(this.input.accelerate ? 1 : 0, this.analog.throttle) : 0;
                 input.brake = live ? Math.max(this.input.brake ? 1 : 0, this.analog.brake) : 0;
                 input.steer = live ? this.steerInput : 0;
+                // Brake assist: far too fast for the corner ahead, so lift and brake a little.
+                // Never while drifting or boosting, which are the player's own decisions.
+                if (live && this.assistOn && !this.input.drift && !this.input.boost && racer.vehicle.speed > 14) {
+                    this.assist ??= buildAssist(this.model, racer.vehicle);
+                    const help = this.assist.correct(racer.tracker.s, racer.vehicle.speed);
+                    if (help.lift) { input.throttle = 0; input.brake = Math.max(input.brake, help.brake); }
+                }
                 input.nitro = live && this.input.boost;
                 input.handbrake = live && this.input.drift;
             } else {
@@ -860,32 +867,15 @@ export class RoadRaceGame {
         if (v.nitroActive && !this.audioNitroStart) this.audio.nitroStart();
         this.audioNitroStart = v.nitroActive;
 
-        // Air tricks: steer in mid-air to barrel roll; finish the roll for nitro.
-        const air = v.airborne && v.airTime > 0.3;
-        const steer = Math.abs(this.steerInput) > 0.3 ? Math.sign(this.steerInput) : 0;
-        if (air && steer !== 0) { this.trick.roll += steer * 7.2 * dt; this.trick.active = true; }
+        // Air time pays score; a landing kicks up dust and shakes the camera.
         if (landed) {
-            const turns = Math.abs(this.trick.roll) / (Math.PI * 2);
             if (v.lastAirTime > 0.45) {
                 this.score += Math.round(v.lastAirTime * 220);
-                if (turns >= 0.8) {
-                    const bonus = 0.12 + Math.min(2, Math.floor(turns + 0.2)) * 0.1;
-                    v.nitro = Math.min(1, v.nitro + bonus);
-                    this.score += 600;
-                    this.showToast(`BARREL ROLL  +${Math.round(bonus * 100)}% NITRO`, 'nitro', 1.6);
-                } else {
-                    this.showToast(`AIR ${v.lastAirTime.toFixed(1)}s`, 'good', 1.1);
-                }
+                this.showToast(`AIR ${v.lastAirTime.toFixed(1)}s`, 'good', 1.1);
             }
             this.audio.landing(v.landingImpact / 8);
             this.cameraRig.addShake(Math.min(0.7, v.landingImpact / 14));
             this.dust(v, Math.min(1, v.landingImpact / 9));
-        }
-        // Back on the ground (landed, reset or recovered in mid-air): finish the roll upright.
-        if (!v.airborne && this.trick.roll !== 0) {
-            const target = Math.round(this.trick.roll / (Math.PI * 2)) * Math.PI * 2;
-            this.trick.roll += (target - this.trick.roll) * Math.min(1, dt * 18);
-            if (Math.abs(target - this.trick.roll) < 0.01) { this.trick.roll = 0; this.trick.active = false; }
         }
     }
 
@@ -943,17 +933,10 @@ export class RoadRaceGame {
             vehicle.pose(alpha, racer.pos, racer.quat);
             visual.root.position.copy(racer.pos);
             visual.root.quaternion.copy(racer.quat);
-            if (racer.isPlayer && this.trick.roll !== 0) {
-                // Barrel roll about the middle of the vehicle. Rolling about its origin, which
-                // sits at road level, would swing the whole model down through the road.
-                const before = TRICK_UP.set(0, 1, 0).applyQuaternion(visual.root.quaternion);
-                visual.root.quaternion.multiply(TRICK_QUAT.setFromAxisAngle(TRICK_AXIS, this.trick.roll));
-                const after = TRICK_UP2.set(0, 1, 0).applyQuaternion(visual.root.quaternion);
-                visual.root.position.addScaledVector(before.sub(after), TRICK_PIVOT_HEIGHT);
-            }
             updateVehicleVisual(visual, vehicle, dt || 0.016);
             // Ghost cars (just respawned) blink so they read as intangible.
-            visual.root.visible = !racer.eliminated && (vehicle.ghostTimer <= 0 || Math.floor(time * 12) % 2 === 0);
+            this.updateWreck(racer, dt);
+            visual.root.visible = !racer.eliminated && !racer.shattered && (vehicle.ghostTimer <= 0 || Math.floor(time * 12) % 2 === 0);
             if (racer.lights) {
                 const glow = vehicle.braking ? 14 : 3;
                 for (const light of racer.lights.tail) light.material.emissiveIntensity = glow;
@@ -977,6 +960,7 @@ export class RoadRaceGame {
         this.cameraRig.update(dt || 0.016, p.vehicle, p.pos, { nitro, speedRatio });
         this.look?.update();
         this.traffic.update(dt);
+        this.wreckFx.update(dt);
         if (dt > 0) {
             this.particles.update(dt, this.camera, this.renderer.domElement.clientHeight);
             this.smoke.update(dt, this.camera, this.renderer.domElement.clientHeight);
@@ -988,6 +972,42 @@ export class RoadRaceGame {
             rpm: v.rpm, throttle: this.started ? Math.max(0.1, v.input.throttle) : 0.1, running: !this.paused && !this.finished && this.ready,
             speedRatio, nitro, slip: Math.max(0, slide), airborne: v.airborne, gear: v.gear, siren: this.sirenLevel()
         });
+    }
+
+    // What a wreck looks like. A bike breaks apart: the model is hidden and its pieces fly.
+    // A car is thrown over (see Vehicle.wreck) and burns until it is back in the race.
+    updateWreck(racer, dt) {
+        const { vehicle } = racer;
+        const wrecked = vehicle.mode === 'wrecked';
+        if (wrecked && !racer.wasWrecked) {
+            if (racer.info.type === 'BIKE') {
+                racer.shattered = true;
+                this.wreckFx.burst(racer.pos, vehicle.velocity, racer.paint, 18);
+                this.explosion(racer.pos, 0.8);
+            } else {
+                racer.burning = 60;
+            }
+        }
+        if (!wrecked && racer.wasWrecked) {
+            racer.shattered = false;
+            racer.burning = Math.min(racer.burning || 0, 0.8);    // the fire dies as it rejoins
+        }
+        racer.wasWrecked = wrecked;
+        if (racer.burning > 0 && dt > 0) {
+            racer.burning -= dt;
+            const p = racer.pos;
+            for (let i = 0; i < 3; i += 1) {
+                // Flames: bright, rising, short-lived. Smoke: dark and slow, drifting up behind.
+                this.particles.spawn(p.x + (Math.random() - 0.5) * 1.6, p.y + 0.5 + Math.random() * 0.5, p.z + (Math.random() - 0.5) * 2.4,
+                    (Math.random() - 0.5) * 1.5, 2.5 + Math.random() * 3, (Math.random() - 0.5) * 1.5,
+                    0.35 + Math.random() * 0.35, 0.9, 0.15, 0.9, 1, 0.45 + Math.random() * 0.3, 0.08, -1.5, 0.6);
+            }
+            if (Math.random() < dt * 22) {
+                this.smoke.spawn(p.x + (Math.random() - 0.5), p.y + 1.2, p.z + (Math.random() - 0.5),
+                    (Math.random() - 0.5) * 1.2, 2.2 + Math.random() * 1.5, (Math.random() - 0.5) * 1.2,
+                    1.6 + Math.random() * 0.9, 0.9, 4.2, 0.5, 0.07, 0.07, 0.07, -0.4, 0.4);
+            }
+        }
     }
 
     // How close the nearest pursuit unit is, 0 (none within 120 m) to 1 (alongside).
@@ -1128,6 +1148,7 @@ export class RoadRaceGame {
         safely('skid marks', () => this.skids?.dispose());
         safely('glow texture', () => this.glow?.dispose());
         safely('traffic', () => this.traffic?.dispose());
+        safely('wreckage', () => this.wreckFx?.dispose());
         safely('city look', () => this.look?.dispose());
         safely('physics', () => this.physics?.dispose());
         safely('environment', () => this.environment?.dispose());

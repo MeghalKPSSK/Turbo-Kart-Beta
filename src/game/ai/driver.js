@@ -232,7 +232,11 @@ export class AIDriver {
         for (const hazard of obstacles) {
             const ahead = track.wrapS(hazard.s - s);
             const passed = ahead > track.length - 6;
-            if (passed || ahead > horizon) {
+            // Moving traffic only matters at the rate it is being caught: nothing to do about a
+            // vehicle that is pulling away, and a slow closing speed needs far less room.
+            const closing = Math.abs(speed) - (hazard.speed || 0);
+            const reach = hazard.speed ? clamp(18 + closing * 2.2, 26, horizon) : horizon;
+            if (passed || ahead > reach || (hazard.speed && closing < 1.5)) {
                 this.avoidSide.delete(hazard.id);
                 continue;
             }

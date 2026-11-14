@@ -813,10 +813,12 @@ export class Vehicle {
         const up = 3.2 + Math.min(4.5, flatSpeed * 0.07) * severity;
         this.body.applyImpulse({ x: away.x * m * 3.5, y: m * up, z: away.z * m * 3.5 }, true);
         const spin = (4 + 5 * severity) * (Math.random() < 0.5 ? -1 : 1);
+        // A car is rolled hard enough to go right over; a bike only needs to be thrown.
+        const roll = this.spec.isBike ? 0.35 : 1.0;
         this.body.applyTorqueImpulse({
-            x: this.forward.x * m * 1.4 * spin * 0.35 + this.up.x * this.spec.inertia.y * spin * 0.5,
-            y: this.forward.y * m * 1.4 * spin * 0.35 + this.up.y * this.spec.inertia.y * spin * 0.5,
-            z: this.forward.z * m * 1.4 * spin * 0.35 + this.up.z * this.spec.inertia.y * spin * 0.5
+            x: this.forward.x * m * 1.4 * spin * roll + this.up.x * this.spec.inertia.y * spin * 0.5,
+            y: this.forward.y * m * 1.4 * spin * roll + this.up.y * this.spec.inertia.y * spin * 0.5,
+            z: this.forward.z * m * 1.4 * spin * roll + this.up.z * this.spec.inertia.y * spin * 0.5
         }, true);
         this.nitroActive = false;
         this.drifting = false;

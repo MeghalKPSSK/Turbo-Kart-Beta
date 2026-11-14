@@ -42,7 +42,7 @@ export const TOUCH_MODES = {
 
 const cloneKeys = (keys) => Object.fromEntries(ACTIONS.map(({ id }) => [id, [...(keys?.[id] || DEFAULT_KEYS[id])]]));
 
-export const defaultSettings = () => ({ volume: 0.8, quality: 'high', touch: 'auto', keys: cloneKeys(DEFAULT_KEYS) });
+export const defaultSettings = () => ({ volume: 0.8, quality: 'high', touch: 'auto', assist: true, keys: cloneKeys(DEFAULT_KEYS) });
 
 export function loadSettings() {
     try {
@@ -53,6 +53,7 @@ export function loadSettings() {
                 volume: Number.isFinite(stored.volume) ? Math.min(1, Math.max(0, stored.volume)) : base.volume,
                 quality: QUALITY_LEVELS[stored.quality] ? stored.quality : base.quality,
                 touch: TOUCH_MODES[stored.touch] ? stored.touch : base.touch,
+                assist: stored.assist !== false,
                 keys: cloneKeys(stored.keys)
             };
         }

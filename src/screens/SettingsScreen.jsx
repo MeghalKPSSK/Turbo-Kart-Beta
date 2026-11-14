@@ -50,6 +50,10 @@ export default function SettingsScreen({ settings, onChange, onBack }) {
                         <span>On-screen buttons<small>{TOUCH_MODES[settings.touch].detail}</small></span>
                         <Choice options={TOUCH_MODES} value={settings.touch} onChange={(touch) => onChange({ ...settings, touch })} />
                     </div>
+                    <div className="settings-row">
+                        <span>Brake assist<small>Slows you when you arrive far too fast for a corner. Turn it off for full control.</small></span>
+                        <Choice options={{ on: { label: 'On' }, off: { label: 'Off' } }} value={settings.assist ? 'on' : 'off'} onChange={(value) => onChange({ ...settings, assist: value === 'on' })} />
+                    </div>
                     <div className="section-kicker">04 / GAMEPAD</div>
                     <p className="settings-note">Plug in a controller and press any button. Left stick or d-pad steers, right trigger accelerates, left trigger brakes, A is nitro, X or right bumper drifts, Y resets, Start pauses.</p>
                 </div>

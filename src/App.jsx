@@ -137,6 +137,7 @@ export default function App() {
             event: setup.rules,
             quality: QUALITY_LEVELS[settingsRef.current.quality],
             volume: settingsRef.current.volume,
+            assist: settingsRef.current.assist,
             onReady: (info) => {
                 if (!live) return;
                 setMinimapPath(info?.minimapPath || []);

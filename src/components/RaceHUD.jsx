@@ -80,7 +80,7 @@ function RaceHUD({ hud, vehicle, eventLabel, eventTitle, minimapPath, keys, show
             {hud.banner && (
                 <div className={`hud-banner ${hud.banner.kind}`}><b>{hud.banner.text}</b><span>{hud.banner.sub}</span></div>
             )}
-            {hud.airtime && <div className="hud-air">AIRBORNE · {hud.airTime.toFixed(1)}s · STEER TO BARREL ROLL</div>}
+            {hud.airtime && <div className="hud-air">AIRBORNE · {hud.airTime.toFixed(1)}s</div>}
 
             <aside className="hud-leaderboard">
                 {visible.map((row) => (
