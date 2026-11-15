@@ -40,7 +40,7 @@ export function buildVehicleSpec(vehicle, upgrades = {}, { gravity = DEFAULT_GRA
         mount: { x: wheel.x, y: wheel.radius + springLengthAtRest, z: wheel.z }
     }));
 
-    const length = dims.length;
+    const length = dims.inertiaLength || dims.length;
     // Roll and yaw inertia may be given a wider stance than the bodywork (see carDims).
     const width = dims.inertiaWidth || dims.width;
     const inertia = {

@@ -457,6 +457,8 @@ def join(objects, name):
         bpy.ops.object.join()
     joined = bpy.context.view_layer.objects.active
     joined.name = name
+    # Bake the first part's placement into the mesh, so the joined object has no transform.
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     return joined
 
 
@@ -474,6 +476,7 @@ def assemble(asset_id, wheels):
         wheel = join(parts, f"WheelMesh_{key}")
         bpy.context.scene.cursor.location = centre
         bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
+        wheel.location = centre
         pivots.append((key, wheel, centre))
         meshes.append(wheel)
     # Turn the whole car so its nose points down -Y, then bake that into the meshes.
@@ -509,7 +512,7 @@ def export(asset_id):
 # Preview render
 # --------------------------------------------------------------------------- #
 
-def render_preview(path):
+def render_preview(path, camera_location=(5.6, -5.2, 1.55), target=(0.0, 0, 0.55)):
     scene = bpy.context.scene
     for engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
         try:
@@ -541,9 +544,9 @@ def render_preview(path):
     camera.name = "Camera"
     scene.camera = camera
     # Front and rear three-quarter views.
-    for suffix, location in (("front", (5.6, -5.2, 1.55)),):
+    for suffix, location in (("front", camera_location),):
         camera.location = location
-        direction = Vector((0.0, 0, 0.55)) - camera.location
+        direction = Vector(target) - camera.location
         camera.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
         scene.render.filepath = str(path.with_name(f"{path.stem}_{suffix}.png"))
         bpy.ops.render.render(write_still=True)

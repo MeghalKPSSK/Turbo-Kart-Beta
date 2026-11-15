@@ -80,9 +80,12 @@ checks the source.
   Northstar S (mid-engined supercar). Each is a smooth lofted body with cut
   wheel arches, a glazed cabin, alloy wheels with brake discs, and lamps.
   Add `-- --preview` to render a picture of each into `assets/previews/`.
-- **Bikes:** four bikes built by `tools/blender/build_road_vehicles.py`
-  (Nightjar Streetfighter, Vector Trackbike, Driftwood Scrambler, Solstice
-  Endurance), with editable source in `assets/blender/turbo_road_vehicles.blend`.
+- **Bikes:** four motorcycles with a rider, built by
+  `tools/blender/build_street_bikes.py`: the Nightjar Streetfighter (naked),
+  Vector Trackbike (full fairing, rider tucked), Driftwood Scrambler (high bars,
+  high pipe, block-tread tyres) and Solstice Endurance (tall screen). Each has
+  forks, a twin-spar frame, swingarm, engine, exhaust, disc brakes and lamps.
+- **Traffic:** sedan, hatchback, van, truck and bus from the street-car generator.
 - Exported models are in `public/models/blender/`.
 
 Paint selection recolours the model; power, grip and armour upgrades change race

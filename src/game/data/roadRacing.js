@@ -31,35 +31,44 @@ const carDims = ({ wheelbase, track, radius, length, width, roof, cabin, cabinWi
     exhausts: [{ x: 0.36, y: 0.34, z: -length / 2 + 0.05 }, { x: -0.36, y: 0.34, z: -length / 2 + 0.05 }]
 });
 
-// Bikes are simulated on four narrow, all-wheel-driven contact points so they stay upright
-// and keep traction; the model leans visually into corners.
-const bikeDims = (radius) => ({
-    wheelbase: 2.13,
-    wheels: [
-        { name: 'FL', x: 0.3, y: radius, z: 1.08, radius, steered: true, driven: true, front: true },
-        { name: 'FR', x: -0.3, y: radius, z: 1.08, radius, steered: true, driven: true, front: true },
-        { name: 'RL', x: 0.3, y: radius, z: -1.05, radius, steered: false, driven: true, front: false },
-        { name: 'RR', x: -0.3, y: radius, z: -1.05, radius, steered: false, driven: true, front: false }
-    ],
-    body: {
-        half: [0.36, 0.55, 1.4],
-        center: [0, 1.0, 0],
-        parts: [
-            { half: [0.3, 0.27, 0.5], center: [0, 1.8, 0.15] },     // rider
-            { half: [0.3, 0.12, 1.2], center: [0, 1.62, 0] }        // tank, screen and tail
-        ]
-    },
-    comHeight: 0.55,
-    mass: 460,
-    length: 3.3,
-    width: 1.16,
-    exhausts: [{ x: 0.2, y: 0.62, z: -1.3 }, { x: -0.2, y: 0.62, z: -1.3 }]
-});
+// Bikes (tools/blender/build_street_bikes.py) are simulated on four narrow, all-wheel-driven
+// contact points so they stay upright and keep traction; the model leans visually into
+// corners. `highPipe` is the scrambler's raised exhaust.
+const bikeDims = ({ highPipe = false } = {}) => {
+    const radius = 0.35;
+    const axle = 0.81;
+    return {
+        // Steering response of the longer machine the handling was tuned around: with the true
+        // 1.62 m wheelbase the same steering input turns the bike too sharply for a keyboard.
+        wheelbase: 2.13,
+        wheels: [
+            { name: 'FL', x: 0.3, y: radius, z: axle, radius, steered: true, driven: true, front: true },
+            { name: 'FR', x: -0.3, y: radius, z: axle, radius, steered: true, driven: true, front: true },
+            { name: 'RL', x: 0.3, y: radius, z: -axle, radius, steered: false, driven: true, front: false },
+            { name: 'RR', x: -0.3, y: radius, z: -axle, radius, steered: false, driven: true, front: false }
+        ],
+        body: {
+            half: [0.45, 0.4, 1.2],
+            center: [0, 0.85, 0],
+            parts: [
+                { half: [0.36, 0.52, 0.62], center: [0, 1.66, -0.08] }    // rider
+            ]
+        },
+        comHeight: 0.55,
+        mass: 460,
+        length: 2.4,
+        width: 0.9,
+        // Yaw and roll inertia of the longer, wider machine the handling was tuned around.
+        inertiaLength: 3.3,
+        inertiaWidth: 1.16,
+        exhausts: [highPipe ? { x: -0.22, y: 0.82, z: -0.95 } : { x: -0.23, y: 0.46, z: -0.9 }]
+    };
+};
 
 export const ROAD_VEHICLES = [
     {
         id: 'bike_nightjar',
-        dims: bikeDims(0.58),
+        dims: bikeDims(),
         name: 'Nightjar Streetfighter',
         type: 'BIKE',
         model: 'bike_nightjar.glb',
@@ -69,7 +78,7 @@ export const ROAD_VEHICLES = [
     },
     {
         id: 'bike_vector',
-        dims: bikeDims(0.58),
+        dims: bikeDims(),
         name: 'Vector Trackbike',
         type: 'BIKE',
         model: 'bike_vector.glb',
@@ -79,7 +88,7 @@ export const ROAD_VEHICLES = [
     },
     {
         id: 'bike_driftwood',
-        dims: bikeDims(0.64),
+        dims: bikeDims({ highPipe: true }),
         name: 'Driftwood Scrambler',
         type: 'BIKE',
         model: 'bike_driftwood.glb',
@@ -89,7 +98,7 @@ export const ROAD_VEHICLES = [
     },
     {
         id: 'bike_solstice',
-        dims: bikeDims(0.58),
+        dims: bikeDims(),
         name: 'Solstice Endurance',
         type: 'BIKE',
         model: 'bike_solstice.glb',
