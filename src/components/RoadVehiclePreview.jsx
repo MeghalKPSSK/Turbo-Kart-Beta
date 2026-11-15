@@ -21,7 +21,9 @@ export default function RoadVehiclePreview({ vehicle, paint, className = '' }) {
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
         renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
         renderer.outputColorSpace = THREE.SRGBColorSpace;
-        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        // Neutral tone mapping keeps saturated paint its own colour; the filmic curve turned
+        // bright reds and blues pale in daylight.
+        renderer.toneMapping = THREE.NeutralToneMapping;
         renderer.toneMappingExposure = 0.98;
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;

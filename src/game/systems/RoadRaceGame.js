@@ -283,7 +283,9 @@ export class RoadRaceGame {
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.quality.pixelRatio));
         this.renderer.setSize(width, height);
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        // Neutral tone mapping keeps saturated paint its own colour; the filmic curve turned
+        // bright reds and blues pale in daylight.
+        this.renderer.toneMapping = THREE.NeutralToneMapping;
         this.renderer.toneMappingExposure = 0.98;
         this.renderer.shadowMap.enabled = this.quality.shadows > 0;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
