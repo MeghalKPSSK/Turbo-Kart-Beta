@@ -4,7 +4,7 @@
 // Street cars (tools/blender/build_street_cars.py). `cabin` is [rear z, front z] of the
 // glasshouse. The cabin gets its own massless collision box so a car on its roof rests on the
 // roof instead of sinking into the road; verify-assets checks the boxes against the model.
-const carDims = ({ wheelbase, track, radius, length, width, roof, cabin, cabinWidth }) => ({
+const carDims = ({ wheelbase, track, radius, length, width, roof, cabin, cabinWidth, wing = null }) => ({
     wheelbase,
     wheels: [
         { name: 'FL', x: track, y: radius, z: wheelbase / 2, radius, steered: true, driven: true, front: true },
@@ -18,7 +18,9 @@ const carDims = ({ wheelbase, track, radius, length, width, roof, cabin, cabinWi
         half: [width / 2, 0.25, length / 2],
         center: [0, 0.75, 0],
         parts: [
-            { half: [cabinWidth, (roof - 0.9) / 2 + 0.03, (cabin[1] - cabin[0]) / 2], center: [0, (roof + 0.9) / 2, (cabin[0] + cabin[1]) / 2] }
+            { half: [cabinWidth, (roof - 0.9) / 2 + 0.03, (cabin[1] - cabin[0]) / 2], center: [0, (roof + 0.9) / 2, (cabin[0] + cabin[1]) / 2] },
+            // A raised rear wing (`wing` is { z, top, halfWidth }) gets a box too, so it is not pushed into the road.
+            ...(wing ? [{ half: [wing.halfWidth, (wing.top - 0.95) / 2, 0.26], center: [0, (wing.top + 0.95) / 2, wing.z] }] : [])
         ]
     },
     comHeight: 0.4,
@@ -108,7 +110,7 @@ export const ROAD_VEHICLES = [
     },
     {
         id: 'car_apex_gp',
-        dims: carDims({ wheelbase: 2.66, track: 0.795, radius: 0.345, length: 4.52, width: 1.93, roof: 1.27, cabin: [-1.45, 0.94], cabinWidth: 0.74 }),
+        dims: carDims({ wheelbase: 2.66, track: 0.795, radius: 0.345, length: 4.52, width: 1.93, roof: 1.27, cabin: [-1.45, 0.94], cabinWidth: 0.74, wing: { z: -1.97, top: 1.25, halfWidth: 0.76 } }),
         name: 'Apex GT',
         type: 'CAR',
         model: 'car_apex_gp.glb',
@@ -138,7 +140,7 @@ export const ROAD_VEHICLES = [
     },
     {
         id: 'car_northstar_gp',
-        dims: carDims({ wheelbase: 2.7, track: 0.815, radius: 0.35, length: 4.56, width: 2.0, roof: 1.16, cabin: [-1.25, 1.12], cabinWidth: 0.72 }),
+        dims: carDims({ wheelbase: 2.7, track: 0.815, radius: 0.35, length: 4.56, width: 2.0, roof: 1.16, cabin: [-1.25, 1.12], cabinWidth: 0.72, wing: { z: -1.99, top: 1.3, halfWidth: 0.91 } }),
         name: 'Northstar S',
         type: 'CAR',
         model: 'car_northstar_gp.glb',
