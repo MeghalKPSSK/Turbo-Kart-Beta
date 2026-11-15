@@ -512,9 +512,23 @@ def build_rider(spec, mats, grips):
         cars.ellipsoid(tuple(elbow + (elbow - (shoulder + hand) / 2).normalized() * 0.022), (0.04, 0.036, 0.042), mats["carbon"], "ElbowCap")
         # Glove: a gauntlet cuff over the sleeve and a closed fist on the grip.
         hose([hand.lerp(elbow, 0.22), hand.lerp(elbow, 0.02)], [(0, 0.047, 0.044), (1, 0.04, 0.036)], "Rider_Glove", mats["boot"], sides=12, smooth=0, hint=(0, 0, 1))
-        fist = grips[index] + Vector((-0.005, -side * 0.03, 0.012))
-        cars.ellipsoid(tuple(fist), (0.05, 0.055, 0.04), mats["boot"], "Rider_Glove")
-        cars.ellipsoid(tuple(fist + Vector((0.012, 0, 0.022))), (0.03, 0.045, 0.02), mats["carbon"], "KnuckleGuard")
+        # The hand: a palm behind the bar, four fingers curled over it and a thumb under.
+        along = Vector((-0.12 if spec["fairing"] else -0.08, side, 0.0)).normalized()
+        grip = grips[index]
+        cars.ellipsoid(tuple(grip - along * 0.05 + Vector((-0.036, 0, 0.012))), (0.034, 0.05, 0.022), mats["boot"], "Rider_Glove")
+        for finger in range(4):
+            g = grip - along * (0.014 + 0.024 * finger)
+            hose([g + Vector((-0.04, 0, 0.016)), g + Vector((-0.012, 0, 0.03)), g + Vector((0.022, 0, 0.018)), g + Vector((0.026, 0, -0.012)), g + Vector((0.006, 0, -0.024))],
+                 [(0, 0.012, 0.012), (1, 0.009, 0.009)], "Rider_Finger", mats["boot"], sides=6, smooth=3)
+        g = grip - along * 0.095
+        hose([g + Vector((-0.036, 0, 0.004)), g + Vector((-0.012, 0, -0.022)), g + Vector((0.016, 0, -0.022))], [(0, 0.013, 0.013), (1, 0.01, 0.01)], "Rider_Thumb", mats["boot"], sides=6, smooth=3)
+        cars.ellipsoid(tuple(grip - along * 0.05 + Vector((-0.02, 0, 0.032))), (0.022, 0.048, 0.012), mats["carbon"], "KnuckleGuard")
+        # Stretch panels: ribbed bands above the elbow and the knee, where real leathers flex.
+        for centre, toward, radius in ((elbow.lerp(shoulder, 0.26), shoulder - elbow, 0.062),):
+            axis = toward.normalized()
+            for band in (-1, 0, 1):
+                at = centre + axis * band * 0.02
+                hose([at - axis * 0.006, at + axis * 0.006], radius * 1.05, "StretchPanel", mats["leather"], sides=14, smooth=0, hint=(0, 0, 1))
 
         # Leg: thigh gripping the tank, knee forward, calf down to the boot on the peg.
         hip = hips + out * 0.11 + Vector((0.02, 0, -0.03))
@@ -526,6 +540,10 @@ def build_rider(spec, mats, grips):
         leg = cars.Skin(trouser)
         leg.ribbon(cars.line(tuple(hip.lerp(knee, 0.15)), tuple(knee), 0.03) + cars.line(tuple(knee), tuple(ankle), 0.03)[1:], (0, -side, 0.15), 0.055, mats["paint"], "LegStripe", lift=0.004)
         cars.ellipsoid(tuple(knee + Vector((0.035, side * 0.012, 0.02))), (0.045, 0.042, 0.055), mats["carbon"], "KneeCap")
+        axis = (hip - knee).normalized()
+        for band in (-1, 0, 1):
+            at = knee.lerp(hip, 0.3) + axis * band * 0.024
+            hose([at - axis * 0.007, at + axis * 0.007], [(0, 0.08, 0.084), (1, 0.08, 0.084)], "StretchPanel", mats["leather"], sides=16, smooth=0)
         cars.ellipsoid(tuple(knee + Vector((0.01, side * 0.062, -0.01))), (0.045, 0.014, 0.055), mats["trim"], "KneeSlider")
         # Boot: a tall shaft with a shin plate, and the foot on the peg, toe down.
         hose([ankle.lerp(knee, 0.42), ankle.lerp(knee, 0.2), ankle + Vector((0, 0, -0.02))], [(0, 0.062, 0.068), (0.5, 0.058, 0.064), (1, 0.05, 0.056)],

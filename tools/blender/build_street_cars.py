@@ -345,7 +345,7 @@ def build_body(spec, mats):
         # Full ring: left side up to the top centre, then back down the right side.
         rings.append(left + right[::-1])
     count = len(rings[0])
-    sharp = {3: 0.5, 7: 0.62, 9: 0.5}                 # rocker top, shoulder line, roof edge
+    sharp = {3: 0.7, 7: 0.88, 9: 0.72}                # rocker top, shoulder line, roof edge
     for index, zone in enumerate(zones):
         a, b = rings[index], rings[index + 1]
         for k in range(count):
@@ -393,8 +393,12 @@ def build_body(spec, mats):
             centre = face.calc_center_median()
             return abs(centre.y) > 0.3 and min(math.hypot(centre.x - x, centre.z - axle_z) for x in (spec["wheelbase"] / 2, -spec["wheelbase"] / 2)) < reach
 
-        # No lining over the windows or across the wheel openings.
-        bmesh.ops.delete(inside, geom=[face for face in inside.faces if face.material_index == GLASS or at_wheel(face)], context="FACES")
+        # Only the cabin is lined: nothing over the windows, across the wheel openings, or out in
+        # the nose and tail where the shell is too thin to hide it.
+        front = spec["marks"]["windshield"][0][1] + 0.25
+        back = spec["marks"]["rearglass"][0][0] - 0.25
+        bmesh.ops.delete(inside, geom=[face for face in inside.faces if face.material_index == GLASS or at_wheel(face)
+                                       or not back < face.calc_center_median().x < front], context="FACES")
         inside.normal_update()
         for vertex in inside.verts:
             vertex.co -= vertex.normal * 0.014
@@ -530,11 +534,15 @@ class Skin:
     def __init__(self, body):
         self.tree = BVHTree.FromObject(body, bpy.context.evaluated_depsgraph_get())
 
-    def cast(self, through, direction, grazing=0.1):
+    def cast(self, through, direction, grazing=0.1, reach=None):
         direction = Vector(direction).normalized()
         origin = Vector(through) - direction * 6.0
         location, normal, _, _ = self.tree.ray_cast(origin, direction)
         if location is None:
+            return None
+        # ``reach``: ignore surface further than this from the point aimed at, so a detail
+        # meant for the nose never lands on a wing far behind it.
+        if reach is not None and (location - Vector(through)).length > reach:
             return None
         if normal.dot(direction) > 0:
             normal = -normal
@@ -573,7 +581,7 @@ class Skin:
                 previous = pair
         return finish(mesh, name, material, angle=1.2, recalc=False)
 
-    def patch(self, corners, direction, material, name, lift=0.005, step=0.035, grazing=0.1, rounded=False):
+    def patch(self, corners, direction, material, name, lift=0.005, step=0.035, grazing=0.1, rounded=False, reach=None):
         """A four-cornered panel laid onto the surface. ``corners`` run round the outline."""
         a, b, c, d = (Vector(corner) for corner in corners)
         nu = max(2, round(max((b - a).length, (c - d).length) / step))
@@ -586,7 +594,7 @@ class Skin:
             for i in range(nu + 1):
                 u = i / nu
                 through = a.lerp(b, u).lerp(d.lerp(c, u), v)
-                hit = self.cast(through, direction, grazing)
+                hit = self.cast(through, direction, grazing, reach)
                 row.append((mesh.verts.new(hit[0] + hit[1] * lift), hit[1]) if hit else None)
             grid.append(row)
         for j in range(nv):
@@ -819,7 +827,7 @@ def build_lamps(skin, spec, mats):
         cast = (-1, -side * 0.55, -0.12)
         corner = lambda y, z: (nose_x, side * y, z)
         skin.patch([corner(inner, lamp_z - lamp_h), corner(outer, lamp_z - lamp_h * 0.7 + sweep_up),
-                    corner(outer, lamp_z + sweep_up + lamp_h * 0.25), corner(inner, lamp_z)], cast, mats["trim"], "LampHousing", lift=0.004, grazing=0.22)
+                    corner(outer, lamp_z + sweep_up + lamp_h * 0.25), corner(inner, lamp_z)], cast, mats["trim"], "LampHousing", lift=0.004, grazing=0.16, reach=0.42, step=0.016)
         skin.patch([corner(inner + 0.02, lamp_z - 0.022), corner(outer - 0.02, lamp_z - 0.02 + sweep_up + lamp_h * 0.22),
                     corner(outer - 0.02, lamp_z - 0.006 + sweep_up + lamp_h * 0.22), corner(inner + 0.02, lamp_z - 0.006)],
                    cast, mats["lamp"], "LampStrip", lift=0.008, step=0.025)
@@ -849,7 +857,7 @@ def build_lamps(skin, spec, mats):
         cast = (-1, 0, -0.05)
         a, b = grille_w + 0.06, nose_w * 0.9
         skin.patch([(nose_x, side * a, grille_low + 0.01), (nose_x, side * b, grille_low + 0.04), (nose_x, side * b, grille_low + 0.13), (nose_x, side * a, grille_low + 0.11)],
-                   cast, mats["trim"], "SideIntake", lift=0.004)
+                   cast, mats["trim"], "SideIntake", lift=0.004, grazing=0.3, reach=0.22, step=0.016)
     # Tail lamps and the light bar that joins them.
     tail_w, tail_top, tail_low = stations[1][1], stations[1][3], stations[0][2]
     rear = style.get("tail", {})
@@ -894,6 +902,18 @@ def build_details(skin, spec, mats):
                     for dx, dz in ((-0.03, -0.01), (0.03, -0.01), (0.03, 0.012), (-0.03, 0.012))] for i in range(3)], "MirrorArm", mats["trim"])
             shell = ellipsoid((head.x + 0.01, head.y + side * 0.03, head.z + 0.02), (0.07, 0.085, 0.052), mats["paint"], "Mirror")
             box((head.x - 0.045, head.y + side * 0.03, head.z + 0.02), (0.012, 0.13, 0.07), mats["glass"], "MirrorGlass", bevel=0.004)
+    # Wipers parked along the foot of the screen, and a filler flap on the left rear wing.
+    if "windshield" in marks:
+        cowl = marks["windshield"][0][1]
+        reach = value_at(spec, cowl - 0.1, 5)
+        for start in (-reach * 0.78, -reach * 0.02):
+            skin.ribbon(line((cowl - 0.035, start, 0), (cowl - 0.1, start + reach * 0.72, 0), 0.02), (0, 0, -1), 0.014, mats["trim"], "Wiper", lift=0.012)
+            skin.ribbon(line((cowl - 0.01, start + 0.02, 0), (cowl - 0.06, start + reach * 0.36, 0), 0.02), (0, 0, -1), 0.02, mats["trim"], "WiperArm", lift=0.008)
+    cap_x = -spec["wheelbase"] / 2 - 0.02
+    cap_z = (spec["wheel_radius"] + arch_radius(spec) + value_at(spec, cap_x, 3)) / 2 + 0.035
+    for radius, material, lift in ((0.062, mats["trim"], 0.004), (0.054, mats["paint"], 0.006)):
+        skin.patch([(cap_x - radius, 0, cap_z - radius), (cap_x + radius, 0, cap_z - radius), (cap_x + radius, 0, cap_z + radius), (cap_x - radius, 0, cap_z + radius)],
+                   (0, -1, 0), material, "FillerFlap", lift=lift, step=0.009, rounded=True, grazing=0.3)
     # Exhaust tips: polished pipes with dark throats.
     pipes = spec.get("pipes", [0.36])
     for side in (1, -1):
@@ -1058,7 +1078,7 @@ def build_aero_package(skin, spec, mats):
         x = half - clear - 0.02
         for side in (1, -1):
             z = value_at(spec, x, 2) + (value_at(spec, x, 3) - value_at(spec, x, 2)) * 0.6
-            skin.patch([(x - 0.2, 0, z - 0.06), (x, 0, z - 0.09), (x, 0, z + 0.07), (x - 0.24, 0, z + 0.03)], (0, -side, 0), mats["trim"], "FenderVent", lift=0.004)
+            skin.patch([(x - 0.2, 0, z - 0.06), (x, 0, z - 0.09), (x, 0, z + 0.07), (x - 0.24, 0, z + 0.03)], (0, -side, 0), mats["trim"], "FenderVent", lift=0.004, step=0.016, grazing=0.03)
             for slat in range(3):
                 sx = x - 0.05 - slat * 0.06
                 skin.ribbon(line((sx, 0, z - 0.07), (sx - 0.03, 0, z + 0.05), 0.02), (0, -side, 0), 0.014, mats["carbon"], "FenderVentSlat", lift=0.009)
