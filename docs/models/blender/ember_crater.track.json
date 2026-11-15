@@ -2,10 +2,10 @@
   "version": 2,
   "id": "ember_crater",
   "theme": "volcano",
-  "width": 24.0,
+  "width": 24,
   "length": 1149.23,
-  "gravity": 13.0,
-  "guardrailOffset": 3.0,
+  "gravity": 13,
+  "guardrailOffset": 3,
   "forwardAxis": "+Z",
   "coordinateSystem": "Three.js Y-up, +Z forward; route lateral + is left",
   "terrain": "Blender-generated 3D mountain heightfield",
@@ -1022,7 +1022,7 @@
     ],
     [
       -70.668,
-      -3.0,
+      -3,
       -56.055
     ],
     [
@@ -1091,7 +1091,7 @@
       -58.167
     ],
     [
-      -36.0,
+      -36,
       -3.776,
       -58.75
     ],
@@ -1336,7 +1336,7 @@
       -137.927
     ],
     [
-      47.0,
+      47,
       1.042,
       -138.725
     ],
@@ -2427,7 +2427,7 @@
         159.677
       ],
       "s": 117.68,
-      "lane": 0.0
+      "lane": 0
     },
     {
       "position": [
@@ -2454,7 +2454,7 @@
         -115.259
       ],
       "s": 669.02,
-      "lane": 0.0
+      "lane": 0
     },
     {
       "position": [
@@ -2719,5 +2719,6 @@
       "s": 207.68,
       "kind": "air"
     }
-  ]
+  ],
+  "trees": []
 }

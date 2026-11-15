@@ -60,6 +60,7 @@ def car_materials(paint):
         "alloy": principled("Wheel_Alloy", (0.62, 0.64, 0.66), metallic=1.0, roughness=0.22),
         "disc": principled("Brake_Disc", (0.45, 0.45, 0.46), metallic=1.0, roughness=0.35),
         "caliper": principled("Brake_Caliper", (0.75, 0.05, 0.03), metallic=0.3, roughness=0.4),
+        "carbon": principled("Aero_Carbon", (0.018, 0.024, 0.031), metallic=0.32, roughness=0.34),
         "lamp": principled("Lamp_Head", (0.9, 0.9, 0.85), roughness=0.1, emission=(1.0, 0.95, 0.85), strength=6.0),
         "tail": principled("Lamp_Tail", (0.35, 0.0, 0.0), roughness=0.2, emission=(1.0, 0.05, 0.02), strength=4.0),
         "chrome": principled("Chrome", (0.8, 0.8, 0.82), metallic=1.0, roughness=0.08),
@@ -427,7 +428,65 @@ def build_details(spec, mats):
     box((tail_x + 0.035, 0, stations[0][2] + 0.19), (0.03, 0.44, 0.1), mats["plate"], "PlateRear", bevel=0.006)
 
 
-def build_car(spec):
+def build_aero_package(spec, mats):
+    """Add a visible road-supercar aero package inside the game collider envelope."""
+    nose = max(station[0] for station in spec["stations"])
+    tail = min(station[0] for station in spec["stations"])
+    width = spec["half_width"]
+    splitter_x = nose - 0.25
+    # Wide, two-stage chin spoiler and corner canards, like the low road racers in
+    # the supplied supercar references. The pieces stay inside the stock footprint.
+    box((splitter_x, 0, 0.25), (0.48, width * 1.86, 0.065), mats["carbon"], "FrontSplitter", bevel=0.018)
+    box((splitter_x - 0.10, 0, 0.205), (0.30, width * 1.58, 0.035), mats["trim"], "Splitter_Lip", bevel=0.01)
+    for side in (-1, 1):
+        box((0.0, side * width * 0.88, 0.32), (spec["wheelbase"] * 0.68, 0.095, 0.13),
+            mats["carbon"], "SideSkirt", bevel=0.018)
+        box((nose - 0.37, side * width * 0.76, 0.43), (0.37, 0.20, 0.035),
+            mats["carbon"], "FrontCanard", bevel=0.01, rotation=(0, 0, side * 0.16))
+
+        # Deep side intake with three crisp slats behind the front wheel.
+        vent_x = spec["wheelbase"] * 0.5 - 0.12
+        vent_y = side * (width - 0.035)
+        box((vent_x - 0.22, vent_y, 0.61), (0.46, 0.025, 0.13), mats["carbon"], "Side_Intake", bevel=0.018)
+        for slat in range(3):
+            box((vent_x - 0.34 + slat * 0.12, vent_y + side * 0.014, 0.61), (0.025, 0.014, 0.105),
+                mats["alloy"], "Intake_Slat", bevel=0.006)
+
+    # Louvered hood extractors and a thin, sculpted LED signature at the nose.
+    hood_x = nose - 0.92
+    hood_top = spec["stations"][0][3]
+    for start, end in zip(spec["stations"], spec["stations"][1:]):
+        if start[0] <= hood_x <= end[0]:
+            blend = (hood_x - start[0]) / (end[0] - start[0])
+            hood_top = start[3] + (end[3] - start[3]) * blend
+            break
+    box((hood_x, 0, hood_top + 0.012), (0.34, 0.36, 0.024), mats["carbon"], "Hood_Extractor", bevel=0.01)
+    for side in (-1, 1):
+        box((nose - 0.22, side * width * 0.62, 0.56), (0.10, 0.39, 0.045), mats["lamp"], "LED_Headlight", bevel=0.02)
+        box((nose - 0.19, side * width * 0.64, 0.41), (0.12, 0.32, 0.09), mats["carbon"], "Brake_Duct", bevel=0.02)
+
+    # Raised GT wing, diffuser and a full-width tail lamp. Height stays below 1 m,
+    # so roof slides and upside-down impacts still use the existing collision hull.
+    wing_x = tail + 0.42
+    wing_z = 0.86
+    span = width * 1.72
+    box((wing_x, 0, wing_z), (0.24, span, 0.075), mats["carbon"], "RearWing", bevel=0.02)
+    for side in (-1, 1):
+        box((wing_x, side * (span / 2 - 0.035), wing_z), (0.28, 0.07, 0.16),
+            mats["paint"], "RearWingEndplate", bevel=0.018)
+        box((wing_x + 0.09, side * 0.34, wing_z - 0.14), (0.09, 0.065, 0.20),
+            mats["carbon"], "RearWingSupport", bevel=0.012)
+
+    tail_z = spec["stations"][0][3] - 0.09
+    box((tail + 0.045, 0, tail_z), (0.055, spec["stations"][0][1] * 1.55, 0.035),
+        mats["tail"], "FullWidth_TailLamp", bevel=0.012)
+    box((tail + 0.16, 0, 0.265), (0.38, width * 1.18, 0.055), mats["carbon"], "Rear_Diffuser", bevel=0.012)
+    for fin in range(5):
+        y = (fin - 2) * width * 0.19
+        box((tail + 0.18, y, 0.32), (0.40, 0.022, 0.15), mats["trim"], "Diffuser_Fin", bevel=0.006)
+
+
+def build_car(spec, race_car=False):
     measure(spec)
     mats = car_materials(spec["paint"])
     body = build_body(spec, mats)
@@ -439,6 +498,8 @@ def build_car(spec):
             key = f"Wheel_{label}_{side_name}"
             wheels[key] = build_wheel(key, x, side, spec, mats)
     build_details(spec, mats)
+    if race_car:
+        build_aero_package(spec, mats)
     return wheels
 
 
@@ -560,7 +621,7 @@ def main():
     for asset_id in wanted:
         bpy.ops.wm.read_factory_settings(use_empty=True)
         spec = everything[asset_id]
-        wheels = build_car(spec)
+        wheels = build_car(spec, race_car=asset_id in CARS)
         print(f"{asset_id}: length {spec['length']:.2f} width {spec['half_width'] * 2:.2f} height {spec['height']:.2f} "
               f"wheelbase {spec['wheelbase']:.2f} track {spec['track']:.3f} radius {spec['wheel_radius']:.3f}")
         if "--preview" in arguments:

@@ -33,7 +33,17 @@ TEXTURES = {
     "grass": "leafy_grass",
 }
 TEXTURE_MAPS = {"diff": "Diffuse", "nor_gl": "nor_gl", "rough": "Rough"}
-SKY = "learner_park"
+# Terrain of the scenic circuits: colour maps only, blended by slope and height in the game.
+TERRAIN = {
+    "rock": "rock_face_03",
+    "meadow": "aerial_grass_rock",
+    "snow": "snow_02",
+}
+# game name -> Poly Haven sky. "puresky" images have no ground, so they suit any landscape.
+SKIES = {
+    "dusk": "learner_park",
+    "day": "kloofendal_48d_partly_cloudy_puresky",
+}
 TREES = ["island_tree_02", "island_tree_01", "jacaranda_tree"]
 
 
@@ -42,10 +52,14 @@ def fetch_json(url):
         return json.load(response)
 
 
+FETCHED = []
+
+
 def download(url, target):
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists() and target.stat().st_size > 0:
         return
+    FETCHED.append(target)
     print(f"  {url.rsplit('/', 1)[-1]} -> {target.relative_to(ROOT)}")
     request = urllib.request.Request(url, headers=HEADERS)
     with urllib.request.urlopen(request, timeout=600) as response, open(target, "wb") as handle:
@@ -53,16 +67,15 @@ def download(url, target):
             handle.write(chunk)
 
 
-def shrink_detail_maps(folder):
-    """Normal and roughness maps are halved to 512 px: they cost download size and the
-    difference is not visible at racing speed. Uses macOS ``sips``; skipped elsewhere."""
+def shrink(path, size, quality=80):
+    """Resizes a newly downloaded image in place. Uses macOS ``sips``; skipped elsewhere."""
+    if path not in FETCHED:
+        return                      # already processed on an earlier run
     if not shutil.which("sips"):
-        print("  sips not found: leaving the detail maps at 1024 px")
+        print(f"  sips not found: leaving {path.name} at its downloaded size")
         return
-    for path in sorted(folder.glob("*.jpg")):
-        size = "512" if path.stem.endswith(("_nor_gl", "_rough")) else "1024"
-        subprocess.run(["sips", "-Z", size, "-s", "formatOptions", "80", str(path), "--out", str(path)],
-                       check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(["sips", "-Z", str(size), "-s", "format", "jpeg", "-s", "formatOptions", str(quality), str(path), "--out", str(path)],
+                   check=True, stdout=subprocess.DEVNULL)
 
 
 def main():
@@ -71,15 +84,26 @@ def main():
         print(f"texture {asset}")
         files = fetch_json(API + asset)
         for short, key in TEXTURE_MAPS.items():
-            entry = files[key]["1k"]["jpg"]
-            download(entry["url"], textures / f"{name}_{short}.jpg")
+            target = textures / f"{name}_{short}.jpg"
+            download(files[key]["1k"]["jpg"]["url"], target)
+            # Normal and roughness maps are halved: the difference is not visible at racing speed.
+            shrink(target, 1024 if short == "diff" else 512)
 
-    shrink_detail_maps(textures)
+    for name, asset in TERRAIN.items():
+        print(f"terrain {asset}")
+        files = fetch_json(API + asset)
+        target = textures / f"{name}_diff.jpg"
+        download(files["Diffuse"]["1k"]["jpg"]["url"], target)
+        shrink(target, 1024)
 
-    print(f"sky {SKY}")
-    files = fetch_json(API + SKY)
-    download(files["hdri"]["1k"]["hdr"]["url"], ROOT / "public" / "sky" / "dusk_1k.hdr")
-    download(files["tonemapped"]["url"], ROOT / "assets" / "polyhaven" / "sky" / "dusk_8k.jpg")
+    for name, asset in SKIES.items():
+        print(f"sky {asset}")
+        files = fetch_json(API + asset)
+        download(files["hdri"]["1k"]["hdr"]["url"], ROOT / "public" / "sky" / f"{name}_1k.hdr")
+        # The visible backdrop: the tone-mapped photograph, reduced to 4096 x 2048.
+        backdrop = ROOT / "public" / "sky" / f"{name}_4k.jpg"
+        download(files["tonemapped"]["url"], backdrop)
+        shrink(backdrop, 4096, 82)
 
     for asset in TREES:
         print(f"model {asset}")

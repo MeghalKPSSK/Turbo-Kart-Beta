@@ -87,12 +87,19 @@ export default function RoadVehiclePreview({ vehicle, paint, className = '' }) {
             const center = bounds.getCenter(new THREE.Vector3());
             const size = bounds.getSize(new THREE.Vector3());
             model.position.set(-center.x, -bounds.min.y, -center.z);
-            const focusHeight = Math.max(0.75, size.y * 0.42);
+            const focusHeight = Math.max(0.75, size.y * 0.5);
             const span = Math.max(size.x, size.z, 2.2);
-            const distance = span * 1.16;
-            // Show the full silhouette from a front three-quarter angle so
-            // the rider, wheelbase and vehicle proportions read at a glance.
-            camera.position.set(distance * 1.02, Math.max(1.65, size.y * 0.76), distance * 0.76);
+            const halfVerticalFov = THREE.MathUtils.degToRad(camera.fov * 0.5);
+            const halfHorizontalFov = Math.atan(Math.tan(halfVerticalFov) * camera.aspect);
+            const cameraY = Math.max(1.65, size.y * 0.76);
+            const horizontalRatio = Math.hypot(1.02, 0.76);
+            const verticalSightDistance = size.y * 1.16 / (2 * Math.tan(halfVerticalFov));
+            const verticalOffset = cameraY - focusHeight;
+            const verticalFit = Math.sqrt(Math.max(0, verticalSightDistance ** 2 - verticalOffset ** 2)) / horizontalRatio;
+            const horizontalFit = span * 1.16 / (2 * Math.tan(halfHorizontalFov) * horizontalRatio);
+            const distance = Math.max(span * 1.16, verticalFit, horizontalFit);
+            // Fit both the rider's full helmet and the vehicle's longest dimension.
+            camera.position.set(distance * 1.02, cameraY, distance * 0.76);
             camera.lookAt(0, focusHeight, 0);
             scene.add(model);
         }).catch((error) => {

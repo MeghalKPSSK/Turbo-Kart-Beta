@@ -272,6 +272,12 @@ def build_bike(spec, mats):
     shell((-0.3, 0, 0.855), (0.44, 0.25, 0.07), mats["seat"], "Seat")
     shell((-0.3, 0, 0.8), (0.5, 0.2, 0.1), mats["paint"], "TankBridge")
     shell((-0.63, 0, 0.87), (0.4, 0.2, 0.13), mats["paint"], "Tail", rotation=(0, math.radians(-10), 0))
+    for side in (1, -1):
+        cars.ellipsoid((-0.02, side * 0.19, 0.79), (0.13, 0.035, 0.13), mats["seat"], "TankGrip")
+        # Exposed frame guards and sculpted tank knee pads make the bike read as
+        # a built machine rather than a single painted shell.
+        shell((0.04, side * 0.185, 0.59), (0.27, 0.045, 0.18), mats["carbon"], "Frame_Guard")
+        shell((0.15, side * 0.20, 0.83), (0.25, 0.055, 0.12), mats["paint"], "Tank_KneePad")
     cars.box((-0.84, 0, 0.87), (0.03, 0.14, 0.04), mats["tail"], "TailLamp", bevel=0.01)
     cars.box((-0.88, 0, 0.66), (0.02, 0.2, 0.12), mats["plate"], "Plate", bevel=0.005, rotation=(0, math.radians(-20), 0))
     tube((-0.74, 0, 0.82), (-0.88, 0, 0.68), 0.012, mats["trim"], "PlateStalk")
@@ -297,14 +303,22 @@ def build_bike(spec, mats):
         shell((0.52, 0, 1.04 + 0.05 * screen), (0.34, 0.3, 0.2 * screen), mats["glass"], "Screen", rotation=(0, math.radians(38), 0))
         for side in (1, -1):
             shell((0.24, side * 0.18, 0.5), (0.9, 0.09, 0.56), mats["paint"], "SidePanel", rotation=(0, math.radians(-8), side * math.radians(-4)))
-            cars.ellipsoid((0.9, side * 0.085, 0.76), (0.035, 0.055, 0.022), mats["lamp"], "Headlamp")
+            shell((0.47, side * 0.22, 0.63), (0.22, 0.045, 0.14), mats["carbon"], "Fairing_Intake")
+            # Prominent twin winglets and air ducts echo the track motorcycles in the references.
+            shell((0.63, side * 0.27, 0.72), (0.36, 0.15, 0.075), mats["carbon"], "AeroWinglet",
+                  rotation=(0, math.radians(-8), side * math.radians(7)), levels=1)
+            cars.ellipsoid((0.9, side * 0.085, 0.76), (0.045, 0.063, 0.027), mats["trim"], "Headlamp_Housing")
+            cars.ellipsoid((0.93, side * 0.085, 0.76), (0.024, 0.046, 0.018), mats["lamp"], "Headlamp")
             tube((0.6, side * 0.17, 0.95), (0.62, side * 0.27, 1.0), 0.006, mats["trim"], "MirrorStem")
             cars.ellipsoid((0.62, side * 0.29, 1.0), (0.012, 0.05, 0.03), mats["paint"], "Mirror")
-        shell((0.12, 0, 0.21), (0.7, 0.3, 0.14), mats["paint"], "BellyPan")
+        shell((0.12, 0, 0.21), (0.7, 0.3, 0.14), mats["carbon"], "BellyPan")
+        # A contrasting nose blade and a small chin spoiler define the front fairing.
+        shell((0.92, 0, 0.60), (0.16, 0.23, 0.045), mats["carbon"], "Front_Chin")
     else:
         # Round headlamp in a shell, and a small instrument pod.
-        cars.ellipsoid((head.x + 0.2, 0, head.z - 0.04), (0.09, 0.1, 0.1), mats["trim"], "LampShell")
-        cars.ellipsoid((head.x + 0.26, 0, head.z - 0.04), (0.04, 0.085, 0.085), mats["lamp"], "Headlamp")
+        cars.ellipsoid((head.x + 0.2, 0, head.z - 0.04), (0.11, 0.13, 0.13), mats["trim"], "LampShell")
+        cars.ellipsoid((head.x + 0.27, 0, head.z - 0.04), (0.05, 0.098, 0.098), mats["lamp"], "Headlamp")
+        shell((head.x + 0.16, 0, head.z + 0.14), (0.16, 0.20, 0.14), mats["glass"], "FlyScreen", rotation=(0, math.radians(16), 0))
         cars.box((head.x + 0.06, 0, head.z + 0.12), (0.04, 0.14, 0.07), mats["trim"], "Clocks", bevel=0.012, rotation=(0, math.radians(-25), 0))
     return grips
 
@@ -337,6 +351,7 @@ def build_rider(spec, mats, grips):
     cars.ellipsoid(tuple(head), (0.14, 0.125, 0.135), mats["paint"], "Rider_Helmet")
     cars.ellipsoid(tuple(head + Vector((0.06, 0, -0.065))), (0.09, 0.105, 0.06), mats["paint"], "Rider_ChinBar")
     cars.ellipsoid(tuple(head + Vector((0.082, 0, 0.012))), (0.068, 0.098, 0.052), mats["glass"], "Visor")
+    cars.box(tuple(head + Vector((-0.005, 0, 0.12))), (0.18, 0.018, 0.014), mats["carbon"], "Helmet_Crest", bevel=0.006)
     limb(neck - Vector((0.03, 0, 0.04)), head, 0.065, mats["leather"], "Rider_Neck")
 
     for index, side in enumerate((1, -1)):
@@ -345,6 +360,7 @@ def build_rider(spec, mats, grips):
         hand = grips[index] + Vector((0, 0, 0.025))
         elbow = (shoulder + hand) / 2 + Vector((-0.04, side * 0.07, -0.1))
         cars.ellipsoid(tuple(shoulder + Vector((0, side * 0.01, 0.01))), (0.095, 0.09, 0.09), mats["leather"], "Rider_Shoulder")
+        cars.ellipsoid(tuple(shoulder + Vector((-0.02, side * 0.045, 0.035))), (0.075, 0.07, 0.06), mats["carbon"], "Rider_Shoulder_Armor")
         limb(shoulder, elbow, 0.068, mats["leather"], "Rider_UpperArm", taper=0.84)
         limb(elbow, hand, 0.058, mats["leather"], "Rider_Forearm", taper=0.72)
         cars.ellipsoid(tuple(hand), (0.06, 0.05, 0.042), mats["boot"], "Rider_Glove")

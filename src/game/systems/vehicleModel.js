@@ -18,6 +18,9 @@ function paintMaterial(source, color) {
         // Metallic paint under a glossy lacquer, which is what catches the sky and street lights.
         material.roughness = 0.3;
         material.metalness = 0.5;
+        // The race sky and city lamps are the main paint reflections in this game.
+        // A little extra environment response keeps every selected livery readable.
+        material.envMapIntensity = 1.35;
         if ('clearcoat' in material) {
             material.clearcoat = 1;
             material.clearcoatRoughness = 0.07;

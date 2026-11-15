@@ -216,6 +216,55 @@ class CityMesh:
         self.uvs.extend(uvs[i] for i in order)
         self.slots.append(material)
 
+    def ellipsoid(self, centre, radii, material, yaw=0.0, segments=10, rings=6):
+        """Append a low-poly 3D form. Points use game-space (x, z, height)."""
+        cx, cz, cy = centre
+        rx, rz, ry = radii
+        positions = []
+        for row in range(rings + 1):
+            latitude = -math.pi / 2 + math.pi * row / rings
+            for col in range(segments):
+                longitude = math.tau * col / segments
+                local_x = rx * math.cos(latitude) * math.cos(longitude)
+                local_z = rz * math.cos(latitude) * math.sin(longitude)
+                positions.append((cx + local_x * math.cos(yaw) + local_z * math.sin(yaw),
+                                  cz - local_x * math.sin(yaw) + local_z * math.cos(yaw),
+                                  cy + ry * math.sin(latitude)))
+        for row in range(rings):
+            for col in range(segments):
+                nxt = (col + 1) % segments
+                corners = [positions[row * segments + col], positions[row * segments + nxt],
+                           positions[(row + 1) * segments + nxt], positions[(row + 1) * segments + col]]
+                face_centre = tuple(sum(point[axis] for point in corners) / 4 for axis in range(3))
+                facing = (face_centre[0] - cx, face_centre[1] - cz, face_centre[2] - cy)
+                self.quad(corners, [(col / segments, row / rings), ((col + 1) / segments, row / rings),
+                                    ((col + 1) / segments, (row + 1) / rings), (col / segments, (row + 1) / rings)],
+                          material, facing)
+
+    def beam(self, start, end, radius, material, sides=7):
+        """A tapered-looking 3D crowd limb or railing between game-space points."""
+        direction = tuple(end[i] - start[i] for i in range(3))
+        length = math.sqrt(sum(value * value for value in direction)) or 1.0
+        axis = tuple(value / length for value in direction)
+        reference = (1.0, 0.0, 0.0) if abs(axis[0]) < 0.8 else (0.0, 1.0, 0.0)
+        cross = lambda a, b: (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+        unit = lambda v: tuple(value / (math.sqrt(sum(item * item for item in v)) or 1.0) for value in v)
+        u = unit(cross(axis, reference))
+        v = unit(cross(axis, u))
+        rings = []
+        for point in (start, end):
+            rings.append([(point[0] + radius * (math.cos(math.tau * step / sides) * u[0] + math.sin(math.tau * step / sides) * v[0]),
+                           point[1] + radius * (math.cos(math.tau * step / sides) * u[1] + math.sin(math.tau * step / sides) * v[1]),
+                           point[2] + radius * (math.cos(math.tau * step / sides) * u[2] + math.sin(math.tau * step / sides) * v[2]))
+                          for step in range(sides)])
+        midpoint = tuple((start[i] + end[i]) * 0.5 for i in range(3))
+        for step in range(sides):
+            nxt = (step + 1) % sides
+            corners = [rings[0][step], rings[0][nxt], rings[1][nxt], rings[1][step]]
+            face_centre = tuple(sum(point[axis_index] for point in corners) / 4 for axis_index in range(3))
+            self.quad(corners, [(0, 0), (1, 0), (1, length), (0, length)], material,
+                      (face_centre[0] - midpoint[0], face_centre[1] - midpoint[1], face_centre[2] - midpoint[2]))
+
     def box(self, centre, tangent, half_width, half_depth, base, top, wall, roof, tile=(4.0, 4.0)):
         """Upright box. ``centre``: ``(x, z)``; ``tangent``: unit ``(tx, tz)`` along its width."""
         tx, tz = tangent
@@ -306,6 +355,97 @@ class Street:
 
 def in_ranges(index, ranges):
     return any(first <= index < last for first, last in ranges)
+
+
+def add_spectators(mesh, street, track_id, seed):
+    """Build a compact, actual Blender crowd into the city route export."""
+    shirts = [mesh.material(f"Spectator_Shirt_{index}", colour, 0.0, 0.78)
+              for index, colour in enumerate(((0.12, 0.68, 0.86), (0.93, 0.27, 0.52),
+                                               (0.93, 0.68, 0.18), (0.22, 0.66, 0.38),
+                                               (0.76, 0.80, 0.84), (0.35, 0.39, 0.76)))]
+    skins = [mesh.material(f"Spectator_Skin_{index}", colour, 0.0, 0.92)
+             for index, colour in enumerate(((0.69, 0.43, 0.29), (0.88, 0.65, 0.48),
+                                              (0.43, 0.27, 0.19), (0.76, 0.53, 0.37)))]
+    trousers = mesh.material("Spectator_Trousers", (0.075, 0.095, 0.13), 0.03, 0.88)
+    rng = random.Random(f"{track_id}:crowd:{seed}")
+    # About one small group every 30–35 metres on both sidewalks.
+    spacing = max(1, round(31.0 / SAMPLE_STEP))
+    for index in range(7, street.count - 2, spacing):
+        tangent = street.tangent[index]
+        left = street.left[index]
+        for side in (-1, 1):
+            x, z, road_y = street.at(index, side * (HALF + 5.7))
+            ground = ground_height(x, z) + 0.08
+            # Face each spectator toward the road. Local +Z is forward; local X is across.
+            inward_x, inward_z = -side * left[0], -side * left[1]
+            yaw = math.atan2(inward_x, inward_z)
+            side_x, side_z = math.cos(yaw), -math.sin(yaw)
+            jitter = rng.uniform(-0.65, 0.65)
+            x += side_x * jitter
+            z += side_z * jitter
+            base = (x, z, ground)
+            shirt = shirts[rng.randrange(len(shirts))]
+            skin = skins[rng.randrange(len(skins))]
+            # Clothing, head, legs, and arms are joined into the route mesh at export.
+            mesh.ellipsoid((x, z, ground + 0.92), (0.21, 0.15, 0.37), shirt, yaw)
+            mesh.ellipsoid((x, z, ground + 1.47), (0.13, 0.13, 0.15), skin, yaw)
+            for leg_side in (-1, 1):
+                foot_x = x + side_x * leg_side * 0.095
+                foot_z = z + side_z * leg_side * 0.095
+                mesh.beam((foot_x, foot_z, ground + 0.08),
+                          (foot_x + side_x * leg_side * 0.025, foot_z + side_z * leg_side * 0.025, ground + 0.62),
+                          0.075, trousers)
+            shoulder_y = ground + 1.17
+            for arm_side in (-1, 1):
+                shoulder = (x + side_x * arm_side * 0.18, z - side_z * arm_side * 0.18, shoulder_y)
+                if rng.random() < 0.54:
+                    hand = (shoulder[0] + side_x * arm_side * 0.27 + inward_x * 0.06,
+                            shoulder[1] + side_z * arm_side * 0.27 + inward_z * 0.06,
+                            ground + rng.uniform(1.48, 1.72))
+                else:
+                    hand = (shoulder[0] + side_x * arm_side * 0.30,
+                            shoulder[1] + side_z * arm_side * 0.30,
+                            ground + rng.uniform(0.98, 1.22))
+                mesh.beam(shoulder, hand, 0.065, shirt)
+
+
+def add_neon_race_signs(mesh, street, track_id):
+    colours = ((0.03, 0.70, 0.95), (0.95, 0.10, 0.48), (0.96, 0.53, 0.08))
+    signs = []
+    for index, colour in enumerate(colours):
+        slot = mesh.material(f"Neon_Race_Sign_{index}", colour, 0.1, 0.36)
+        material = mesh.materials[slot]
+        shader = material.node_tree.nodes.get("Principled BSDF") if material.use_nodes else None
+        if shader:
+            emission = shader.inputs.get("Emission Color") or shader.inputs.get("Emission")
+            strength = shader.inputs.get("Emission Strength")
+            if emission: emission.default_value = (*colour, 1.0)
+            if strength: strength.default_value = 3.0
+        signs.append(slot)
+    for sign_index, progress in enumerate((0.14, 0.43, 0.73, 0.91)):
+        at = int(progress * street.count) % street.count
+        side = -1 if sign_index % 2 else 1
+        x, z, road_y = street.at(at, side * (HALF + 10.0))
+        tx, tz = street.tangent[at]
+        nx, nz = street.left[at]
+        # A thin luminous shopfront panel faces the racing line from the building row.
+        half = 3.2
+        base = ground_height(x, z) + 8.0
+        top = base + 2.6
+        corners = [(x - tx * half, z - tz * half, base),
+                   (x + tx * half, z + tz * half, base),
+                   (x + tx * half, z + tz * half, top),
+                   (x - tx * half, z - tz * half, top)]
+        mesh.quad(corners, [(0, 0), (1, 0), (1, 1), (0, 1)], signs[sign_index % len(signs)],
+                  (-side * nx, -side * nz, 0))
+        # Two short bars make the panel read as a designed sign, not a blank glowing slab.
+        stripe_base = base + (0.25 if sign_index % 2 else 1.85)
+        stripe = [(x - tx * 1.2, z - tz * 1.2, stripe_base),
+                  (x + tx * 1.2, z + tz * 1.2, stripe_base),
+                  (x + tx * 1.2, z + tz * 1.2, stripe_base + 0.12),
+                  (x - tx * 1.2, z - tz * 1.2, stripe_base + 0.12)]
+        mesh.quad(stripe, [(0, 0), (1, 0), (1, 1), (0, 1)], signs[(sign_index + 1) % len(signs)],
+                  (-side * nx, -side * nz, 0))
 
 
 def build_city(track_id, spec):
@@ -500,6 +640,11 @@ def build_city(track_id, spec):
                     x, z, _ = street.at(index, side * rng.uniform(22.5, 72.0))
                     if route.clearance(x, z) > 21.5 and all(math.hypot(x - t["position"][0], z - t["position"][2]) > 6.5 for t in trees):
                         plant(x, z, rng.uniform(1.9, 3.3))
+
+    # These are authored into the Blender mesh and ship with the city GLB; the runtime only
+    # adds its lighting and materials. Spectators stay behind the barrier and face the road.
+    add_spectators(mesh, street, track_id, spec["seed"])
+    add_neon_race_signs(mesh, street, track_id)
 
     city = mesh.build(f"{track_id} - City")
 

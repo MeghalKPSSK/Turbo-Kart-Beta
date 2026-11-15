@@ -18,6 +18,7 @@ import { NitroEffect, glowTexture } from '../effects/nitroFx.js';
 import { SkidMarks } from '../effects/skidMarks.js';
 import { GameAudio } from '../audio/gameAudio.js';
 import { createCityLook } from '../effects/cityLook.js';
+import { SCENIC_THEMES, createScenicLook } from '../effects/scenicLook.js';
 import { TrafficSystem, TRAFFIC_MODELS, stalledVehicles } from './traffic.js';
 import { WreckFx } from '../effects/wreckFx.js';
 import { buildAssist } from '../physics/assist.js';
@@ -219,6 +220,14 @@ export class RoadRaceGame {
         // City routes get their textures, sky and trees at load time (see cityLook.js).
         if (meta.theme === 'city') {
             this.look = await createCityLook({
+                renderer: this.renderer, scene: this.scene, camera: this.camera, trackScene: this.trackScene,
+                meta, quality: this.quality, sun: this.sun, hemisphere: this.hemisphere, fill: this.fill
+            });
+            if (this.disposed) { this.look.dispose(); return; }
+        }
+        // Scenic circuits that have been brought up to the same standard (see scenicLook.js).
+        if (SCENIC_THEMES[meta.theme] && meta.trees) {
+            this.look = await createScenicLook({
                 renderer: this.renderer, scene: this.scene, camera: this.camera, trackScene: this.trackScene,
                 meta, quality: this.quality, sun: this.sun, hemisphere: this.hemisphere, fill: this.fill
             });

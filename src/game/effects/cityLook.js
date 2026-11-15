@@ -16,7 +16,7 @@ import { loadProgress } from '../loadProgress.js';
 const BASE = import.meta.env.BASE_URL || '/';
 const cache = new Map();
 
-function once(key, load) {
+export function once(key, load) {
     if (!cache.has(key)) {
         const pending = load();
         pending.catch(() => cache.delete(key));
@@ -25,11 +25,12 @@ function once(key, load) {
     return cache.get(key);
 }
 
-const loadImage = (name) => once(`image:${name}`, () => new THREE.ImageLoader().loadAsync(`${BASE}textures/${name}.jpg`));
-const loadModel = (name) => once(`model:${name}`, () => new GLTFLoader().loadAsync(`${BASE}models/nature/${name}.glb`).then((gltf) => gltf.scene));
+export const loadImage = (name) => once(`image:${name}`, () => new THREE.ImageLoader().loadAsync(`${BASE}textures/${name}.jpg`));
+export const loadModel = (name) => once(`model:${name}`, () => new GLTFLoader().loadAsync(`${BASE}models/nature/${name}.glb`).then((gltf) => gltf.scene));
 
-const loadSky = () => once('sky:hdr', () => new RGBELoader().loadAsync(`${BASE}sky/dusk_1k.hdr`));
-const loadBackdrop = () => once('sky:jpg', () => new THREE.ImageLoader().loadAsync(`${BASE}sky/dusk_4k.jpg`));
+// A sky is two files: an HDR image that lights the scene and a photograph that is seen.
+export const loadSky = (name = 'dusk') => once(`sky:hdr:${name}`, () => new RGBELoader().loadAsync(`${BASE}sky/${name}_1k.hdr`));
+export const loadBackdrop = (name = 'dusk') => once(`sky:jpg:${name}`, () => new THREE.ImageLoader().loadAsync(`${BASE}sky/${name}_4k.jpg`));
 
 // Starts every download the city routes share (sky, surface textures, trees) ahead of time.
 export function preloadCityLook() {
@@ -41,7 +42,7 @@ export function preloadCityLook() {
     ]);
 }
 
-function tiled(image, { color = false, anisotropy = 1 } = {}) {
+export function tiled(image, { color = false, anisotropy = 1 } = {}) {
     const texture = new THREE.Texture(image);
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.colorSpace = color ? THREE.SRGBColorSpace : THREE.NoColorSpace;
@@ -51,7 +52,7 @@ function tiled(image, { color = false, anisotropy = 1 } = {}) {
 }
 
 // A photographic PBR surface: colour, normal and roughness maps from one texture set.
-async function surface(set, anisotropy, { repeat = 1, ...options } = {}) {
+export async function surface(set, anisotropy, { repeat = 1, ...options } = {}) {
     const [diff, normal, rough] = await Promise.all([loadImage(`${set}_diff`), loadImage(`${set}_nor_gl`), loadImage(`${set}_rough`)]);
     const material = new THREE.MeshStandardMaterial({
         map: tiled(diff, { color: true, anisotropy }),
@@ -74,7 +75,9 @@ function seeded(seed) {
     };
 }
 
-const LIT_COLOURS = ['#ffd9a0', '#ffe7c2', '#ffc980', '#e6f0ff', '#fff2d6'];
+// Most windows are warm, with a few cool office floors and saturated shopfronts to give
+// the night streets a lived-in neon rhythm without importing brand signage.
+const LIT_COLOURS = ['#ffd9a0', '#ffe7c2', '#ffc980', '#e6f0ff', '#fff2d6', '#49e6ff', '#ff55c8', '#8b7dff'];
 
 // Building facade: a wall photograph with a grid of windows painted over it. One canvas
 // covers 8 bays by 8 floors (two of the model's UV tiles each way), which hides the repeat.
@@ -127,7 +130,8 @@ function facadeTextures(wallImage, { seed, glass = false, lit = 0.3, tint = '#ff
             const isLit = random() < lit;
             const gradient = c.createLinearGradient(wx, wy, wx, wy + wh);
             if (isLit) {
-                const warm = LIT_COLOURS[Math.floor(random() * LIT_COLOURS.length)];
+                const warmPool = random() < 0.82 ? LIT_COLOURS.slice(0, 5) : LIT_COLOURS.slice(5);
+                const warm = warmPool[Math.floor(random() * warmPool.length)];
                 gradient.addColorStop(0, warm);
                 gradient.addColorStop(1, '#b98a4e');
                 e.fillStyle = warm;
@@ -184,7 +188,9 @@ function poolTexture() {
 async function buildMaterials(anisotropy) {
     const plain = (color, roughness = 0.8, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
     const [asphalt, pavement, block, kerb, barrier, roof, grass, brick, concrete, plaster] = await Promise.all([
-        surface('asphalt', anisotropy, { color: 0x9a9a9a, repeat: 2 }),
+                // Lower roughness and a trace of metallic response catch the city lights on
+                // the road, like a recently rained-on street, without making it a mirror.
+                surface('asphalt', anisotropy, { color: 0x9a9da4, repeat: 2, roughness: 0.62, metalness: 0.12 }),
         surface('pavement', anisotropy),
         surface('concrete', anisotropy, { color: 0x6f7377 }),
         surface('concrete', anisotropy, { color: 0xb9b6ae }),
@@ -196,7 +202,7 @@ async function buildMaterials(anisotropy) {
     const facade = (wall, options, extra = {}) => {
         const textures = facadeTextures(wall, options);
         for (const t of Object.values(textures)) t.anisotropy = anisotropy;
-        return new THREE.MeshStandardMaterial({ ...textures, roughness: 1, metalness: 0, emissive: 0xffffff, emissiveIntensity: 1.7, ...extra });
+        return new THREE.MeshStandardMaterial({ ...textures, roughness: 1, metalness: 0, emissive: 0xffffff, emissiveIntensity: 2.0, ...extra });
     };
     const marking = plain(0xd9d8cf, 0.6);
     marking.polygonOffset = true;
@@ -231,24 +237,26 @@ async function buildMaterials(anisotropy) {
 
 // Instanced trees in a grid of chunks. Each chunk has a detailed and a light version of its
 // trees; only chunks near the camera draw the detailed one.
-const TREE_SPECIES = ['tree_island', 'tree_round', 'tree_tall'];
+export const TREE_SPECIES = ['tree_island', 'tree_round', 'tree_tall'];
 const CHUNK = 90;
 const NEAR = 48;
 const FAR = 380;
 
-function treeParts(model) {
+export function treeParts(model) {
     model.updateMatrixWorld(true);
     const parts = [];
     model.traverse((object) => {
         if (!object.isMesh) return;
         const geometry = object.geometry.clone().applyMatrix4(object.matrixWorld);
         const material = object.material.clone();
+        // The foliage is the cut-out material; the exported names all say "Trunk".
+        const leafy = material.transparent || material.alphaTest > 0;
         material.side = THREE.DoubleSide;
         material.roughness = 0.82;
         material.metalness = 0;
         material.transparent = false;
         material.depthWrite = true;
-        parts.push({ geometry, material, leafy: !/Trunk/i.test(material.name) });
+        parts.push({ geometry, material, leafy });
     });
     return parts;
 }
@@ -257,7 +265,26 @@ function treeParts(model) {
 // Indexes into TREE_SPECIES: mostly the round street tree, with tall and wind-shaped ones between.
 const SPECIES_MIX = [1, 2, 1, 0, 1, 2, 0, 1, 2, 1];
 
-function plantTrees(scene, trees, species, { shadows, detailed }) {
+// options: shadows, detailed (use the near models at all), tint(tree, index) -> THREE.Color
+// for the foliage of each tree (autumn colours on the scenic circuits). With recolour the
+// tint replaces the leaf colour (keeping the texture's light and shade) instead of multiplying
+// it, because no multiple of green is orange; a white tint leaves that tree as it is.
+function recolourLeaves(material) {
+    material.onBeforeCompile = (shader) => {
+        shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `
+            #ifdef USE_COLOR
+                float leafLight = dot(diffuseColor.rgb, vec3(0.3, 0.6, 0.1));
+                float keepGreen = step(2.95, vColor.r + vColor.g + vColor.b);
+                diffuseColor.rgb = mix(vColor.rgb * leafLight * 2.6, diffuseColor.rgb, keepGreen);
+            #endif`);
+    };
+    material.customProgramCacheKey = () => 'recolour-leaves';
+}
+
+export function plantTrees(scene, trees, species, { shadows, detailed, tint = null, recolour = false }) {
+    if (tint && recolour) {
+        for (const { near, far } of species) for (const part of [...near, ...far]) if (part.leafy) recolourLeaves(part.material);
+    }
     const chunks = new Map();
     trees.forEach((tree, index) => {
         const kind = SPECIES_MIX[Math.abs(index * 7 + Math.floor(tree.position[0])) % SPECIES_MIX.length];
@@ -282,7 +309,9 @@ function plantTrees(scene, trees, species, { shadows, detailed }) {
                     dummy.scale.setScalar(tree.scale);
                     dummy.updateMatrix();
                     mesh.setMatrixAt(index, dummy.matrix);
+                    if (tint && part.leafy) mesh.setColorAt(index, tint(tree, index));
                 });
+                if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
                 mesh.instanceMatrix.needsUpdate = true;
                 mesh.computeBoundingSphere();
                 mesh.castShadow = castShadow;
@@ -379,7 +408,7 @@ export async function createCityLook({ renderer, scene, camera, trackScene, meta
         const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: quality.antialias ? 4 : 0 });
         composer = new EffectComposer(renderer, target);
         composer.addPass(new RenderPass(scene, camera));
-        composer.addPass(new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.42, 0.55, 1.0));
+        composer.addPass(new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.52, 0.62, 0.82));
         composer.addPass(new OutputPass());
     }
 
