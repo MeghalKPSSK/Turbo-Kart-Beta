@@ -21,6 +21,7 @@ import { createCityLook } from '../effects/cityLook.js';
 import { TrafficSystem, stalledVehicles } from './traffic.js';
 import { WreckFx } from '../effects/wreckFx.js';
 import { buildAssist } from '../physics/assist.js';
+import { loadProgress } from '../loadProgress.js';
 
 const loader = new GLTFLoader();
 const modelBase = `${import.meta.env.BASE_URL || '/'}models/blender/`;
@@ -82,8 +83,17 @@ const PLAYER_GRID_SLOT = 6;
 const DAY_SUN_OFFSET = new THREE.Vector3(-110, 180, 70);
 const NITRO_PICKUP_GAIN = 0.35;
 
+// Starts downloads before a race is entered, so the loading screen is short or skipped:
+// the physics engine, vehicle models and, when known, the route.
+export function preloadRace({ trackId = null, vehicles = false } = {}) {
+    const loads = [loadRapier()];
+    if (vehicles) for (const vehicle of ROAD_VEHICLES) loads.push(loadAsset(vehicle.model));
+    if (trackId) loads.push(loadAsset(`${trackId}.glb`));
+    return Promise.allSettled(loads);
+}
+
 export class RoadRaceGame {
-    constructor(container, { track, vehicle, paint, upgrades, event = null, quality, volume = 1, assist = true, onReady, onHUD, onFinish, onError }) {
+    constructor(container, { track, vehicle, paint, upgrades, event = null, quality, volume = 1, assist = true, onReady, onProgress, onHUD, onFinish, onError }) {
         this.container = container;
         this.trackInfo = track;
         this.vehicleInfo = vehicle;
@@ -101,6 +111,7 @@ export class RoadRaceGame {
         this.nextCut = event?.interval || 0;
         this.quality = { pixelRatio: 1.75, antialias: true, shadows: 2048, particles: 1, ...(quality || {}) };
         this.onReady = onReady;
+        this.onProgress = onProgress;
         this.onHUD = onHUD;
         this.onFinish = onFinish;
         this.onError = onError;
@@ -149,14 +160,18 @@ export class RoadRaceGame {
     // ------------------------------------------------------------------------------ setup
     async init() {
         const info = this.trackInfo;
+        loadProgress.begin((fraction) => { if (!this.disposed) this.onProgress?.(fraction); });
+        const wait = (promise) => loadProgress.track(promise);
+        // Only the vehicles that are in this race: a time trial needs one model, not eight.
+        const needed = ROAD_VEHICLES.filter((v) => this.vehiclesInRace().has(v.id));
         const [meta, trackScene, RAPIER, vehicleAssets] = await Promise.all([
-            fetch(`${modelBase}${info.id}.track.json`).then((response) => {
+            wait(fetch(`${modelBase}${info.id}.track.json`).then((response) => {
                 if (!response.ok) throw new Error(`Track data unavailable for ${info.name}.`);
                 return response.json();
-            }),
-            loadAsset(`${info.id}.glb`),
-            loadRapier(),
-            Promise.all(ROAD_VEHICLES.map(async (v) => [v.id, await loadAsset(v.model)]))
+            })),
+            wait(loadAsset(`${info.id}.glb`)),
+            wait(loadRapier()),
+            Promise.all(needed.map(async (v) => [v.id, await wait(loadAsset(v.model))]))
         ]);
         if (this.disposed) return;
         if (!meta.route || meta.version < 2) throw new Error(`${info.name} needs its Blender track data rebuilt.`);
@@ -227,6 +242,7 @@ export class RoadRaceGame {
         this.lastFrame = performance.now();
         this.animationFrame = requestAnimationFrame(this.frame);
         this.ready = true;
+        loadProgress.end();
         if (import.meta.env.DEV && typeof window !== 'undefined') window.__trl = { game: this, THREE };
         this.onReady?.({ minimapPath: this.buildMinimapPath() });
         this.publishHUD(true);
@@ -283,13 +299,26 @@ export class RoadRaceGame {
         this.scene.add(this.fill);
     }
 
+    // The rivals of this race (the event's field, or the default one) with their vehicles decided.
+    field() {
+        if (!this.rivalField) {
+            const rivals = this.event?.rivals ?? ROAD_RIVALS.map((rival, index) => ({ ...rival, profile: RIVAL_PROFILES[index % RIVAL_PROFILES.length] }));
+            this.rivalField = rivals.map((rival, index) => ({ ...rival, vehicleId: rival.vehicleId || ROAD_VEHICLES[(index * 3 + 1) % ROAD_VEHICLES.length].id }));
+        }
+        return this.rivalField;
+    }
+
+    vehiclesInRace() {
+        return new Set([this.vehicleInfo.id, ...this.field().map((rival) => rival.vehicleId)]);
+    }
+
     createRacers() {
         const info = this.trackInfo;
         const config = this.event;
         const gradeIndex = Object.keys(GRADE_PACE).indexOf(info.grade);
         const pace = config?.pace ?? GRADE_PACE[info.grade] ?? 1;
         const power = config?.power ?? 0.94 + Math.max(0, gradeIndex) * 0.055;
-        const rivals = config?.rivals ?? ROAD_RIVALS.map((rival, index) => ({ ...rival, profile: RIVAL_PROFILES[index % RIVAL_PROFILES.length] }));
+        const rivals = this.field();
         const total = rivals.length + 1;
         const playerSlot = Math.min(config?.playerSlot ?? PLAYER_GRID_SLOT, total - 1);
         let aiIndex = 0;
@@ -297,7 +326,7 @@ export class RoadRaceGame {
             const isPlayer = slot === playerSlot;
             const rival = isPlayer ? null : rivals[aiIndex];
             const vehicleInfo = isPlayer ? this.vehicleInfo
-                : ROAD_VEHICLES.find((item) => item.id === rival.vehicleId) || ROAD_VEHICLES[(aiIndex * 3 + 1) % ROAD_VEHICLES.length];
+                : ROAD_VEHICLES.find((item) => item.id === rival.vehicleId);
             const spec = buildVehicleSpec(vehicleInfo, isPlayer ? this.upgrades : {}, { gravity: this.model.gravity, power: isPlayer ? 1 : power * (rival.power || 1) });
             const id = isPlayer ? 'player' : `rival_${aiIndex}`;
             const name = isPlayer ? 'YOU' : rival.name;

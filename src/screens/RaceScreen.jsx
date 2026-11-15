@@ -1,11 +1,11 @@
 import RaceHUD from '../components/RaceHUD';
 import TouchControls from '../components/TouchControls';
 
-export default function RaceScreen({ hostRef, phase, countdown, hud, vehicle, track, label, title, rule, minimapPath, error, keys, touch, press, onPause, onResume, onRestart, onQuit, onBackToRoutes }) {
+export default function RaceScreen({ hostRef, phase, countdown, hud, vehicle, track, label, title, rule, progress = 0, minimapPath, error, keys, touch, press, onPause, onResume, onRestart, onQuit, onBackToRoutes }) {
     return (
         <section className="race-screen">
             <div className="race-canvas" ref={hostRef} />
-            {phase === 'loading' && <div className="race-message"><div className="loading-wheel" /><span>PREPARING THE GRID</span><small>{track.name} · {vehicle.name}</small>{rule && <p>{rule}</p>}</div>}
+            {phase === 'loading' && <div className="race-message"><div className="loading-wheel" /><span>PREPARING THE GRID · {Math.round(progress * 100)}%</span><div className="loading-bar"><i style={{ width: `${Math.round(progress * 100)}%` }} /></div><small>{track.name} · {vehicle.name}</small>{rule && <p>{rule}</p>}</div>}
             {phase === 'countdown' && <div className="race-countdown"><span>{countdown > 0 ? countdown : 'RIDE!'}</span><small>{title.toUpperCase()}</small></div>}
             {phase === 'running' && hud && (
                 <RaceHUD

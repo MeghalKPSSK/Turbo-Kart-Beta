@@ -448,3 +448,7 @@ button:focus-visible { outline: 2px solid #ffe28e; outline-offset: 3px; }
   .event-grid { grid-template-columns: 1fr; }
   .cup-active { flex-direction: column; }
 }
+
+/* Loading progress */
+.loading-bar { width: min(280px, 60vw); height: 3px; margin: 10px 0 6px; background: rgba(255, 255, 255, .12); overflow: hidden; }
+.loading-bar i { display: block; height: 100%; background: #ee995f; transition: width .2s ease-out; }

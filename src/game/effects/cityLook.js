@@ -5,6 +5,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { loadProgress } from '../loadProgress.js';
 
 // The look of the city routes. The Blender export carries geometry, UVs in metres and named
 // materials only; this module dresses it at load time with photographic surface textures,
@@ -26,6 +27,19 @@ function once(key, load) {
 
 const loadImage = (name) => once(`image:${name}`, () => new THREE.ImageLoader().loadAsync(`${BASE}textures/${name}.jpg`));
 const loadModel = (name) => once(`model:${name}`, () => new GLTFLoader().loadAsync(`${BASE}models/nature/${name}.glb`).then((gltf) => gltf.scene));
+
+const loadSky = () => once('sky:hdr', () => new RGBELoader().loadAsync(`${BASE}sky/dusk_1k.hdr`));
+const loadBackdrop = () => once('sky:jpg', () => new THREE.ImageLoader().loadAsync(`${BASE}sky/dusk_4k.jpg`));
+
+// Starts every download the city routes share (sky, surface textures, trees) ahead of time.
+export function preloadCityLook() {
+    const images = ['asphalt', 'pavement', 'concrete', 'grass'].flatMap((set) => ['diff', 'nor_gl', 'rough'].map((map) => `${set}_${map}`));
+    return Promise.allSettled([
+        loadSky(), loadBackdrop(),
+        ...[...images, 'brick_diff', 'plaster_diff'].map(loadImage),
+        ...TREE_SPECIES.flatMap((name) => [loadModel(name), loadModel(`${name}_far`)])
+    ]);
+}
 
 function tiled(image, { color = false, anisotropy = 1 } = {}) {
     const texture = new THREE.Texture(image);
@@ -304,11 +318,12 @@ function plantTrees(scene, trees, species, { shadows, detailed }) {
 
 export async function createCityLook({ renderer, scene, camera, trackScene, meta, quality, sun, hemisphere, fill }) {
     const anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    const wait = (promise) => loadProgress.track(promise);
     const [materials, environment, backdrop, ...treeModels] = await Promise.all([
-        buildMaterials(anisotropy),
-        once('sky:hdr', () => new RGBELoader().loadAsync(`${BASE}sky/dusk_1k.hdr`)),
-        once('sky:jpg', () => new THREE.ImageLoader().loadAsync(`${BASE}sky/dusk_4k.jpg`)),
-        ...TREE_SPECIES.flatMap((name) => [loadModel(name), loadModel(`${name}_far`)])
+        wait(buildMaterials(anisotropy)),
+        wait(loadSky()),
+        wait(loadBackdrop()),
+        ...TREE_SPECIES.flatMap((name) => [wait(loadModel(name)), wait(loadModel(`${name}_far`))])
     ]);
 
     // Dress the model: swap each exported placeholder for its real material by name.

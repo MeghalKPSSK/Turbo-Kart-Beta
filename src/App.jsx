@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ROAD_TRACKS, ROAD_VEHICLES } from './game/data/roadRacing';
 import { CUPS, EVENT_TYPES, cupRace, eventRace, findEvent, trackById } from './game/data/career';
-import { RoadRaceGame } from './game/systems/RoadRaceGame';
+import { RoadRaceGame, preloadRace } from './game/systems/RoadRaceGame';
+import { preloadCityLook } from './game/effects/cityLook';
 import { abandonCup, applyRaceResult, buyUpgrade, buyVehicle, loadProfile, ownsVehicle, saveProfile, startCup } from './state/profile';
 import { QUALITY_LEVELS, loadSettings, saveSettings, wantsTouchControls } from './state/settings';
 import { useRaceInput } from './input/useRaceInput';
@@ -41,6 +42,7 @@ export default function App() {
     const [result, setResult] = useState(null);
     const [gameError, setGameError] = useState('');
     const [minimapPath, setMinimapPath] = useState([]);
+    const [loadFraction, setLoadFraction] = useState(0);
     const appShellRef = useRef(null);
     const gameHostRef = useRef(null);
     const gameRef = useRef(null);
@@ -60,6 +62,21 @@ export default function App() {
         gameRef.current?.setVolume(settings.volume);
         uiAudio.setVolume(settings.volume);
     }, [settings.volume]);
+
+    // Fetch what every race needs while the player is still in the menus: first the physics
+    // engine, then the city sky, textures and trees, then the vehicle models. Skipped when the
+    // browser reports a data-saver connection.
+    useEffect(() => {
+        if (navigator.connection?.saveData) return undefined;
+        let cancelled = false;
+        const timer = window.setTimeout(async () => {
+            await preloadRace();
+            if (cancelled) return;
+            await preloadCityLook();
+            if (!cancelled) preloadRace({ vehicles: true });
+        }, 1500);
+        return () => { cancelled = true; window.clearTimeout(timer); };
+    }, []);
 
     // Every button ticks. Race controls are excluded: they have the engine to listen to.
     useEffect(() => {
@@ -115,6 +132,7 @@ export default function App() {
         setResult(null);
         setHud(null);
         setGameError('');
+        setLoadFraction(0);
         setRacePhase('loading');
         setCountdown(3);
         setRaceSession((value) => value + 1);
@@ -144,6 +162,7 @@ export default function App() {
                 setRacePhase('countdown');
                 setCountdown(3);
             },
+            onProgress: (fraction) => { if (live) setLoadFraction(fraction); },
             onHUD: (data) => { if (live) setHud(data); },
             onFinish: (raceResult) => {
                 if (!live) return;
@@ -265,7 +284,7 @@ export default function App() {
                     onGarage={() => openGarage('garage')} onRecords={() => setScreen('records')} onSettings={() => setScreen('settings')} />
             )}
             {screen === 'career' && (
-                <CareerScreen profile={profile} selectedId={eventId} onSelect={setEventId}
+                <CareerScreen profile={profile} selectedId={eventId} onSelect={(id) => { setEventId(id); preloadRace({ trackId: findEvent(id)?.trackId }); }}
                     onBack={() => setScreen('home')} onBuild={() => openGarage('career')} />
             )}
             {screen === 'cups' && (
@@ -282,11 +301,11 @@ export default function App() {
             )}
             {screen === 'courses' && (
                 <CourseScreen profile={profile} chapter={null} storyStage={0} vehicle={vehicle} track={track} trackOptions={ROAD_TRACKS}
-                    onTrack={setTrackId} onBack={() => setScreen('garage')} onStart={launch} />
+                    onTrack={(id) => { setTrackId(id); preloadRace({ trackId: id }); }} onBack={() => setScreen('garage')} onStart={launch} />
             )}
             {screen === 'race' && setup && (
                 <RaceScreen hostRef={gameHostRef} phase={racePhase} countdown={countdown} hud={hud} vehicle={setup.vehicle} track={setup.track}
-                    label={setup.label} title={setup.title} rule={setup.rule} minimapPath={minimapPath} error={gameError} keys={settings.keys} touch={touch} press={press}
+                    label={setup.label} title={setup.title} rule={setup.rule} progress={loadFraction} minimapPath={minimapPath} error={gameError} keys={settings.keys} touch={touch} press={press}
                     onPause={pauseRace} onResume={resumeRace} onRestart={() => startRace()} onQuit={() => exitRace('home')} onBackToRoutes={() => exitRace(lobby)} />
             )}
             {screen === 'result' && result && (
