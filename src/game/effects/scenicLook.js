@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { loadProgress } from '../loadProgress.js';
-import { fillSea, paintLanes, raiseMountains, scatterRocks } from './roadDressing.js';
+import { carve, fillSea, makeCrags, paintLanes, raiseMountains, scatterRocks } from './roadDressing.js';
 import { TREE_SPECIES, loadBackdrop, loadImage, loadModel, loadSky, plantTrees, surface, tiled, treeParts } from './cityLook.js';
 
 // The look of the scenic circuits. Like the city look, it dresses the Blender export at load
@@ -61,19 +61,21 @@ export const SCENIC_THEMES = {
 // The country around each circuit: how high the distant ranges stand (metres; `terraces` steps
 // them into canyon walls, `gap` opens the ring toward the sea) and how much loose rock lies about.
 const COUNTRY = {
-    mountain_adventure: { mountains: { height: 540 }, rocks: { count: 620, reach: 90 } },
-    canyon: { mountains: { height: 320, terraces: 5 }, rocks: { count: 380, size: 1.3 } },
-    island: { mountains: { height: 0 }, rocks: { count: 140 } },
-    volcano: { mountains: { height: 440 }, rocks: { count: 380, size: 1.2 } },
-    ice: { mountains: { height: 500 }, rocks: { count: 260 } },
-    jungle: { mountains: { height: 300 }, rocks: { count: 160 } },
-    industrial: { mountains: { height: 170 }, rocks: { count: 80 } },
-    coastal_sunset: { mountains: { height: 340, gap: 0.42 }, rocks: { count: 260 } }
+    mountain_adventure: { crags: { height: 15 }, mountains: { height: 540 }, rocks: { count: 620, reach: 90 } },
+    canyon: { crags: { height: 24, terraces: 3 }, mountains: { height: 320, terraces: 5 }, rocks: { count: 380, size: 1.3 } },
+    island: { crags: { height: 5 }, mountains: { height: 0 }, rocks: { count: 140 } },
+    volcano: { crags: { height: 17 }, mountains: { height: 440 }, rocks: { count: 380, size: 1.2 } },
+    ice: { crags: { height: 13 }, mountains: { height: 500 }, rocks: { count: 260 } },
+    jungle: { crags: { height: 9 }, mountains: { height: 300 }, rocks: { count: 160 } },
+    industrial: { crags: { height: 4 }, mountains: { height: 170 }, rocks: { count: 80 } },
+    coastal_sunset: { crags: { height: 11 }, mountains: { height: 340, gap: 0.42 }, rocks: { count: 260 } }
 };
 
 const HIDDEN = /_(Scenery_Canopy|Scenery_Canopy_Light|Scenery_Trunk|Scenery_SnowTips|Ridge_Silhouette)$/;
 // Rock props exported as plain shapes: boulders, cliffs, sea stacks. They take the landscape's rock.
 const ROCKY = /_(Scenery_Boulder|Crater_Rock|Ice_Ridge|SeaStack_Coral|Falls_Cliff|Beacon_Stone)$/;
+// Things that stand on the landscape and must move with it when it is carved.
+const GROUNDED = /_(Scenery_Lava|Falls_Water|Lighthouse_Paint|Lighthouse_Lamp|Scenery_Steel|Landmark_Steel|Landmark_Accent)$/;
 // The light and shadow patches are cells of the same landscape, coloured differently.
 const TERRAIN = /_Terrain_(Base|Rock|High|LightPatches|ShadowPatches)$/;
 
@@ -122,7 +124,14 @@ function terrainMaterial({ meadow, rock, snow, snowline, tint }) {
 
 // The exported terrain is flat-shaded (every triangle has its own corners). Weld the corners
 // and recompute normals so slopes shade as one surface.
-function smoothTerrain(mesh) {
+// Rock props ride up and down with the ground they stand on (once: the model is cached).
+function reshape(mesh, crags) {
+    if (mesh.geometry.userData.carved) return;
+    carve(mesh, crags);
+    mesh.geometry.userData.carved = true;
+}
+
+function smoothTerrain(mesh, crags) {
     if (mesh.geometry.userData.smoothed) return;
     const geometry = mesh.geometry;
     for (const name of Object.keys(geometry.attributes)) if (name !== 'position') geometry.deleteAttribute(name);
@@ -143,6 +152,7 @@ function smoothTerrain(mesh) {
     welded.computeVertexNormals();
     welded.userData.smoothed = true;
     mesh.geometry = welded;
+    carve(mesh, crags);
 }
 
 // Where the sun is in an equirectangular HDR sky: the direction of its brightest pixel.
@@ -184,13 +194,16 @@ export async function createScenicLook({ renderer, scene, camera, trackScene, me
     const paint = new THREE.MeshStandardMaterial({ color: 0xe6e4da, roughness: 0.6 });
     const owned = [terrain, rail, post, paint, asphalt];
 
+    const country = COUNTRY[meta.theme] || {};
+    const crags = makeCrags(meta, country.crags);
     trackScene.traverse((object) => {
         if (!object.isMesh) return;
         const name = object.material?.name || '';
         if (HIDDEN.test(name)) { object.visible = false; return; }
         let material = null;
-        if (TERRAIN.test(name)) { smoothTerrain(object); material = terrain; object.castShadow = false; }
-        else if (ROCKY.test(name)) material = terrain;
+        if (TERRAIN.test(name)) { smoothTerrain(object, crags); material = terrain; object.castShadow = false; }
+        else if (ROCKY.test(name)) { reshape(object, crags); material = terrain; }
+        else if (GROUNDED.test(name)) reshape(object, crags);
         else if (/_Track_Asphalt$/.test(name)) { material = asphalt; object.castShadow = false; }
         else if (/_Barrier_Guardrail$/.test(name)) material = rail;
         else if (/_Barrier_Support$/.test(name)) material = post;
@@ -202,7 +215,6 @@ export async function createScenicLook({ renderer, scene, camera, trackScene, me
 
     // Beyond the exported landscape: lane lines on the road, broken rock on the verges and
     // a ring of mountains on the horizon, all in the same rock, meadow and snow.
-    const country = COUNTRY[meta.theme] || {};
     const dressing = [
         paintLanes(scene, trackScene, meta),
         scatterRocks(scene, trackScene, meta, terrain, country.rocks),
@@ -244,7 +256,9 @@ export async function createScenicLook({ renderer, scene, camera, trackScene, me
 
     const palette = theme.foliage.map(([r, g, b]) => new THREE.Color(r, g, b));
     const species = TREE_SPECIES.map((_, index) => ({ near: treeParts(treeModels[index * 2]), far: treeParts(treeModels[index * 2 + 1]) }));
-    const trees = plantTrees(scene, meta.trees || [], species, {
+    // Trees were placed on the exported ground: lift each with the relief under it.
+    const planted = (meta.trees || []).map((tree) => ({ ...tree, position: [tree.position[0], tree.position[1] + crags(tree.position[0], tree.position[2]), tree.position[2]] }));
+    const trees = plantTrees(scene, planted, species, {
         shadows: quality.shadows > 0,
         detailed: quality.particles >= 0.8,
         recolour: Boolean(theme.recolour),

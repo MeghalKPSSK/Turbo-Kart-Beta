@@ -242,7 +242,7 @@ export const TREE_SPECIES = ['tree_island', 'tree_round', 'tree_tall'];
 const CHUNK = 90;
 const NEAR = 48;
 const FAR = 380;
-const MID = 170;      // with a horizon set, real tree models stop here and crowns take over
+const MID = 250;      // with a horizon set, real tree models stop here and crowns take over
 
 export function treeParts(model) {
     model.updateMatrixWorld(true);
@@ -295,11 +295,12 @@ function distantCrown(parts) {
     if (box.isEmpty()) for (const part of parts) { part.geometry.computeBoundingBox(); box.union(part.geometry.boundingBox); }
     const size = box.getSize(new THREE.Vector3());
     const centre = box.getCenter(new THREE.Vector3());
-    const geometry = new THREE.IcosahedronGeometry(1, 1);
+    const geometry = new THREE.IcosahedronGeometry(1, 2);
     const position = geometry.attributes.position;
     for (let i = 0; i < position.count; i += 1) {
         const x = position.getX(i), y = position.getY(i), z = position.getZ(i);
-        const lump = 0.8 + 0.34 * Math.abs(Math.sin(x * 7.1 + y * 3.3) * Math.cos(z * 5.7 + y));
+        // Deep, uneven lobes: boughs and gaps, so the outline is ragged like foliage and never a ball.
+        const lump = 0.62 + 0.42 * Math.abs(Math.sin(x * 5.3 + y * 3.1) * Math.cos(z * 4.7 + y * 2.3)) + 0.24 * Math.sin(x * 11.0 + z * 9.0 + y * 6.0);
         // Narrower toward the top, like a real crown seen from far off.
         const taper = 1 - 0.35 * Math.max(0, y);
         position.setXYZ(i, centre.x + x * size.x * 0.36 * lump * taper, centre.y + y * size.y * 0.5 * lump, centre.z + z * size.z * 0.36 * lump * taper);
@@ -308,7 +309,7 @@ function distantCrown(parts) {
     return geometry;
 }
 
-const CROWN_GREEN = new THREE.Color(0.085, 0.13, 0.055);
+const CROWN_GREEN = new THREE.Color(0.05, 0.08, 0.035);
 const CROWN_DULL = new THREE.Color(0.1, 0.09, 0.05);
 
 // `horizon`: how far away trees are still drawn at all (as distant crowns beyond FAR).
@@ -368,7 +369,7 @@ export function plantTrees(scene, trees, species, { shadows, detailed, tint = nu
                 crown.setMatrixAt(index, dummy.matrix);
                 const colour = tint ? tint(tree, index) : null;
                 if (!colour || colour.r + colour.g + colour.b > 2.95) crownColour.copy(CROWN_GREEN);
-                else if (recolour) crownColour.copy(colour).multiplyScalar(0.2).lerp(CROWN_DULL, 0.35);     // foliage in shade, not paint
+                else if (recolour) crownColour.copy(colour).multiplyScalar(0.13).lerp(CROWN_DULL, 0.4);     // foliage in shade, not paint
                 else crownColour.copy(CROWN_GREEN).multiply(colour);
                 crown.setColorAt(index, crownColour);
             });

@@ -145,6 +145,64 @@ function ridges(noise, x, z, octaves = 5) {
 }
 
 // --------------------------------------------------------------------------------------- //
+// Crags
+// --------------------------------------------------------------------------------------- //
+
+// How much to lift or cut the ground at any point so that the smooth exported hills become
+// broken country: ridges, gullies and outcrops. Nothing changes near the road, so the road,
+// its kerbs and its barriers still sit exactly where they were built. `terraces` steps the
+// relief into ledges (canyon walls).
+export function makeCrags(meta, { height = 12, terraces = 0 } = {}) {
+    if (height <= 0) return () => 0;
+    const noise = valueNoise(hashText(meta.id) + 23);
+    const route = meta.route;
+    const clear = meta.width / 2 + (meta.guardrailOffset || 3) + 5;
+    // A coarse grid of route points, to find the distance to the road quickly.
+    const cell = 40;
+    const grid = new Map();
+    for (let i = 0; i < route.length; i += 1) {
+        const key = `${Math.floor(route[i][0] / cell)},${Math.floor(route[i][2] / cell)}`;
+        if (!grid.has(key)) grid.set(key, []);
+        grid.get(key).push(route[i]);
+    }
+    const reach = 2;        // cells searched either side: beyond that the relief is at full strength anyway
+    return (x, z) => {
+        const cx = Math.floor(x / cell), cz = Math.floor(z / cell);
+        let near = cell * reach;
+        for (let ix = cx - reach; ix <= cx + reach; ix += 1) {
+            for (let iz = cz - reach; iz <= cz + reach; iz += 1) {
+                const list = grid.get(`${ix},${iz}`);
+                if (!list) continue;
+                for (const point of list) near = Math.min(near, Math.hypot(point[0] - x, point[2] - z));
+            }
+        }
+        const fade = Math.min(1, Math.max(0, (near - clear) / 55));
+        if (fade <= 0) return 0;
+        let relief = ridges(noise, x / 95, z / 95, 4) - 0.3 + (ridges(noise, x / 28 + 9, z / 28, 2) - 0.3) * 0.28;
+        if (terraces) relief = (Math.floor(relief * terraces) + Math.min(1, ((relief * terraces) % 1 + 1) % 1 * 4)) / terraces;
+        return relief * height * fade * fade * (3 - 2 * fade);
+    };
+}
+
+// Applies the relief to a mesh, vertex by vertex.
+export function carve(mesh, crags) {
+    const position = mesh.geometry.attributes.position;
+    mesh.updateMatrixWorld(true);
+    const point = new THREE.Vector3();
+    const inverse = mesh.matrixWorld.clone().invert();
+    for (let i = 0; i < position.count; i += 1) {
+        point.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
+        point.y += crags(point.x, point.z);
+        point.applyMatrix4(inverse);
+        position.setXYZ(i, point.x, point.y, point.z);
+    }
+    position.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingBox();
+    mesh.geometry.computeBoundingSphere();
+}
+
+// --------------------------------------------------------------------------------------- //
 // Mountains
 // --------------------------------------------------------------------------------------- //
 
@@ -342,8 +400,53 @@ function signAtlas() {
     return { texture, columns, rows };
 }
 
-// Blade signs standing out from the building fronts along the route, lit from within.
-export function hangSigns(scene, trackScene, meta, { every = 26 } = {}) {
+// Invented advertisers for the big wall screens.
+const SCREENS = [
+    ['NOVA', 'NIGHT DRINKS', ['#ff2d6f', '#3a0ca3']], ['ORBIT', 'ARCADE · 24H', ['#12c2e9', '#0b1a4a']], ['ZENITH', 'TYRES', ['#ffd21f', '#ff5b1a']],
+    ['MERIDIAN CUP', 'SEASON 01', ['#0f0f14', '#e83e2d']], ['HALO', 'SOUND SYSTEMS', ['#19e3c2', '#0b3d5c']], ['VOLT', 'ENERGY', ['#c8ff2e', '#0a5c2a']]
+];
+
+function screenAtlas() {
+    const cell = [512, 288];
+    const canvas = document.createElement('canvas');
+    canvas.width = cell[0] * 3;
+    canvas.height = cell[1] * 2;
+    const c = canvas.getContext('2d');
+    SCREENS.forEach(([name, line, colours], index) => {
+        const x = (index % 3) * cell[0], y = Math.floor(index / 3) * cell[1];
+        const fill = c.createLinearGradient(x, y, x + cell[0], y + cell[1]);
+        fill.addColorStop(0, colours[0]);
+        fill.addColorStop(1, colours[1]);
+        c.fillStyle = fill;
+        c.fillRect(x, y, cell[0], cell[1]);
+        // A bold shape behind the name, different on each screen.
+        c.globalAlpha = 0.28;
+        c.fillStyle = '#ffffff';
+        c.beginPath();
+        if (index % 3 === 0) c.arc(x + cell[0] * 0.78, y + cell[1] * 0.5, cell[1] * 0.42, 0, Math.PI * 2);
+        else if (index % 3 === 1) { c.moveTo(x, y + cell[1]); c.lineTo(x + cell[0] * 0.55, y); c.lineTo(x + cell[0] * 0.75, y); c.lineTo(x + cell[0] * 0.2, y + cell[1]); }
+        else c.rect(x + cell[0] * 0.62, y + cell[1] * 0.12, cell[0] * 0.3, cell[1] * 0.76);
+        c.fill();
+        c.globalAlpha = 1;
+        c.fillStyle = '#ffffff';
+        c.textBaseline = 'middle';
+        c.font = `900 ${name.length > 6 ? 62 : 104}px "Arial Black", Arial, sans-serif`;
+        c.fillText(name, x + 28, y + cell[1] * 0.44);
+        c.font = '700 30px Arial, sans-serif';
+        c.fillText(line, x + 32, y + cell[1] * 0.76);
+        c.strokeStyle = '#05060a';
+        c.lineWidth = 10;
+        c.strokeRect(x + 5, y + 5, cell[0] - 10, cell[1] - 10);
+    });
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 4;
+    return texture;
+}
+
+// Blade signs standing out from the building fronts along the route and big lit screens
+// mounted flat on the walls, all glowing from within.
+export function hangSigns(scene, trackScene, meta, { every = 17 } = {}) {
     const fronts = meshesNamed(trackScene, /_Facade_/);
     if (!fronts.length) return { dispose() {} };
     trackScene.updateMatrixWorld(true);
@@ -351,6 +454,7 @@ export function hangSigns(scene, trackScene, meta, { every = 26 } = {}) {
     const route = meta.route;
     const atlas = signAtlas();
     const positions = [], uvs = [], indices = [];
+    const screens = { positions: [], uvs: [], indices: [] };
     const origin = new THREE.Vector3(), outward = new THREE.Vector3();
     let travelled = every;
     for (let i = 0; i < route.length; i += 1) {
@@ -374,6 +478,22 @@ export function hangSigns(scene, trackScene, meta, { every = 26 } = {}) {
             if (wall.lengthSq() < 0.2) continue;
             wall.normalize();
             if (wall.dot(outward) > 0) wall.negate();          // out of the wall, toward the street
+            if (random() < 0.36) {
+                // A screen flat on the wall, facing the street.
+                const wide = 9 + random() * 7, tall = wide * 9 / 16;
+                const along = new THREE.Vector3(-wall.z, 0, wall.x);
+                const centre = hit.point.clone().addScaledVector(wall, 0.3);
+                centre.y = Math.max(centre.y, here[1] + tall / 2 + 5);
+                const design = Math.floor(random() * SCREENS.length);
+                const u0 = (design % 3) / 3, u1 = u0 + 1 / 3, v1 = 1 - Math.floor(design / 3) / 2, v0 = v1 - 0.5;
+                const base = screens.positions.length / 3;
+                for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+                    screens.positions.push(centre.x + along.x * sx * wide / 2, centre.y + sy * tall / 2, centre.z + along.z * sx * wide / 2);
+                }
+                screens.uvs.push(u1, v0, u0, v0, u0, v1, u1, v1);
+                screens.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+                continue;
+            }
             const tall = 5 + random() * 6;
             const wide = tall / 3;
             const design = Math.floor(random() * SIGNS.length);
@@ -403,8 +523,25 @@ export function hangSigns(scene, trackScene, meta, { every = 26 } = {}) {
     mesh.name = 'SignBoards';
     mesh.frustumCulled = false;
     scene.add(mesh);
+    const screenGeometry = new THREE.BufferGeometry();
+    screenGeometry.setAttribute('position', new THREE.Float32BufferAttribute(screens.positions, 3));
+    screenGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(screens.uvs, 2));
+    screenGeometry.setIndex(screens.indices);
+    screenGeometry.computeVertexNormals();
+    const screenTexture = screenAtlas();
+    const screenMaterial = new THREE.MeshStandardMaterial({
+        color: 0x111111, roughness: 0.35, emissive: 0xffffff, emissiveMap: screenTexture, emissiveIntensity: 1.7, side: THREE.DoubleSide
+    });
+    const wallScreens = new THREE.Mesh(screenGeometry, screenMaterial);
+    wallScreens.name = 'WallScreens';
+    wallScreens.frustumCulled = false;
+    scene.add(wallScreens);
     return {
-        count: indices.length / 12,
-        dispose() { scene.remove(mesh); geometry.dispose(); material.dispose(); atlas.texture.dispose(); }
+        count: indices.length / 12 + screens.indices.length / 6,
+        dispose() {
+            scene.remove(mesh, wallScreens);
+            geometry.dispose(); material.dispose(); atlas.texture.dispose();
+            screenGeometry.dispose(); screenMaterial.dispose(); screenTexture.dispose();
+        }
     };
 }
