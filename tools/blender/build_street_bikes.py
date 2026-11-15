@@ -100,6 +100,86 @@ def shell(location, scale, material, name, rotation=(0, 0, 0), levels=2):
     return cars.add(obj, material)
 
 
+def colour_panels(suit, paint):
+    """Race leathers are cut from coloured panels: the outer arms, shoulders and legs take the
+    bike's paint, the rest stays black."""
+    suit.data.materials.append(paint)
+    for polygon in suit.data.polygons:
+        y = polygon.center.y
+        outward = polygon.normal.y * (1 if y > 0 else -1)
+        if abs(y) > 0.19 and outward > 0.45:
+            polygon.material_index = 1
+
+
+def fuse(prefixes, name, material, voxel=0.012, smooth=4, wrinkles=0.0, budget=6000, panels=None):
+    """Welds every part whose name starts with one of ``prefixes`` into a single continuous
+    surface, so limbs flow into the body and tubes into each other instead of looking like
+    separate shapes pushed together.
+
+    The parts are merged into one watertight skin (voxel remesh), the joins are relaxed into
+    fillets (smoothing), optional fine creases are pressed in (``wrinkles``, in metres), and
+    the result is reduced to about ``budget`` triangles.
+    """
+    parts = [obj for obj in bpy.context.scene.objects if obj.type == "MESH" and obj.name.startswith(tuple(prefixes))]
+    if not parts:
+        return None
+    skin = cars.join(parts, name)
+    skin.data.remesh_voxel_size = voxel
+    skin.data.remesh_voxel_adaptivity = 0.0
+    bpy.ops.object.voxel_remesh()
+    skin = bpy.context.view_layer.objects.active
+    if smooth:
+        relax = skin.modifiers.new("Relax", "SMOOTH")
+        relax.factor = 0.75
+        relax.iterations = smooth
+    cars.apply_modifiers(skin)
+    skin.data.materials.clear()
+    skin.data.materials.append(material)
+    skin.name = name
+    if panels:
+        colour_panels(skin, panels)
+    finish(skin, name, wrinkles, budget)
+    return skin
+
+
+def finish(skin, name, wrinkles, budget):
+    """Presses creases into a welded skin and reduces it to its triangle budget."""
+    if wrinkles:
+        # Three scales: broad folds where a suit bunches, sharper creases, fine grain.
+        for label, scale, strength in (("Folds", 0.075, wrinkles), ("Creases", 0.03, wrinkles * 0.55), ("Grain", 0.012, wrinkles * 0.2)):
+            texture = bpy.data.textures.new(f"{name}_{label}", type="CLOUDS")
+            texture.noise_scale = scale
+            texture.noise_depth = 2
+            crease = skin.modifiers.new(label, "DISPLACE")
+            crease.texture = texture
+            crease.strength = strength
+            crease.mid_level = 0.5
+        cars.apply_modifiers(skin)
+    count = len(skin.data.polygons) * 2
+    if count > budget:
+        reduce = skin.modifiers.new("Reduce", "DECIMATE")
+        reduce.ratio = budget / count
+        cars.apply_modifiers(skin)
+    for polygon in skin.data.polygons:
+        polygon.use_smooth = True
+
+
+def weld(spec, mats):
+    """Turns the assembled primitives into continuous parts."""
+    fuse(["Rider_Torso", "Rider_Hips", "Rider_Chest", "Rider_Belly", "Rider_Neck", "Rider_Shoulder", "Rider_UpperArm",
+          "Rider_Forearm", "Rider_Thigh", "Rider_Shin", "Rider_Calf", "Rider_Seat"],
+         "Suit", mats["leather"], voxel=0.009, smooth=5, wrinkles=0.014, budget=20000, panels=mats["paint"])
+    fuse(["Rider_Helmet", "Rider_ChinBar"], "Helmet", mats["paint"], voxel=0.008, smooth=6, budget=2400)
+    fuse(["Rider_Boot"], "Boots", mats["boot"], voxel=0.008, smooth=4, wrinkles=0.004, budget=1600)
+    fuse(["Rider_Glove"], "Gloves", mats["boot"], voxel=0.007, smooth=3, budget=800)
+    fuse(["Spar", "PivotPlate", "Subframe", "Swingarm"], "Frame", mats["frame"], voxel=0.009, smooth=5, budget=5000)
+    fuse(["Engine", "CylinderHead"], "EngineBlock", mats["engine"], voxel=0.01, smooth=3, budget=3000)
+    fuse(["Header", "Underpipe", "Riser", "Silencer"], "ExhaustPipe", mats["chrome"], voxel=0.007, smooth=5, budget=3000)
+    fuse(["Cowl", "SidePanel", "BellyPan"], "Fairing", mats["paint"], voxel=0.01, smooth=5, budget=9000)
+    fuse(["Tank", "Tail", "TankBridge"], "Bodywork", mats["paint"], voxel=0.01, smooth=6, budget=4500)
+    fuse(["TopYoke", "BottomYoke", "Riser_", "Bar", "Clamp"], "Controls", mats["frame"], voxel=0.006, smooth=3, budget=2500)
+
+
 # --------------------------------------------------------------------------- #
 # Bike
 # --------------------------------------------------------------------------- #
@@ -189,7 +269,8 @@ def build_bike(spec, mats):
 
     # Tank, seat, tail and tail lamp.
     shell((0.1, 0, 0.89), (0.56, 0.36, 0.3), mats["paint"], "Tank", rotation=(0, math.radians(-6), 0))
-    shell((-0.3, 0, 0.83), (0.42, 0.26, 0.08), mats["seat"], "Seat")
+    shell((-0.3, 0, 0.855), (0.44, 0.25, 0.07), mats["seat"], "Seat")
+    shell((-0.3, 0, 0.8), (0.5, 0.2, 0.1), mats["paint"], "TankBridge")
     shell((-0.63, 0, 0.87), (0.4, 0.2, 0.13), mats["paint"], "Tail", rotation=(0, math.radians(-10), 0))
     cars.box((-0.84, 0, 0.87), (0.03, 0.14, 0.04), mats["tail"], "TailLamp", bevel=0.01)
     cars.box((-0.88, 0, 0.66), (0.02, 0.2, 0.12), mats["plate"], "Plate", bevel=0.005, rotation=(0, math.radians(-20), 0))
@@ -202,7 +283,7 @@ def build_bike(spec, mats):
         grip = Vector((head.x - 0.14, side * (0.30 if spec["fairing"] else 0.36), bars_z - (0.02 if spec["fairing"] else 0.0)))
         tube(inner, grip, 0.013, mats["trim"], "Bar")
         tube(grip - Vector((0.0, side * 0.1, 0)), grip, 0.019, mats["seat"], "Grip")
-        tube((head.x - 0.03, side * 0.07, head.z + 0.05), tuple(inner), 0.014, mats["frame"], "Riser")
+        tube((head.x - 0.03, side * 0.07, head.z + 0.05), tuple(inner), 0.014, mats["frame"], "Riser_")
         grips.append(grip)
         if not spec["fairing"]:
             tube(tuple(grip - Vector((0.02, side * 0.06, 0))), (grip.x + 0.02, grip.y - side * 0.02, bars_z + 0.17), 0.006, mats["trim"], "MirrorStem")
@@ -211,14 +292,15 @@ def build_bike(spec, mats):
     if spec["fairing"]:
         screen = spec.get("screen", 1.0)
         # Upper cowl, screen, side panels and belly pan.
-        shell((0.6, 0, 0.84), (0.56, 0.42, 0.4), mats["paint"], "Cowl", rotation=(0, math.radians(18), 0))
+        shell((0.58, 0, 0.84), (0.6, 0.4, 0.4), mats["paint"], "Cowl", rotation=(0, math.radians(20), 0))
+        shell((0.8, 0, 0.74), (0.3, 0.3, 0.22), mats["paint"], "Cowl", rotation=(0, math.radians(35), 0))
         shell((0.52, 0, 1.04 + 0.05 * screen), (0.34, 0.3, 0.2 * screen), mats["glass"], "Screen", rotation=(0, math.radians(38), 0))
         for side in (1, -1):
-            shell((0.24, side * 0.18, 0.5), (0.86, 0.08, 0.54), mats["paint"], "SidePanel", rotation=(0, math.radians(-8), side * math.radians(-4)))
-            cars.ellipsoid((0.84, side * 0.1, 0.8), (0.05, 0.07, 0.035), mats["lamp"], "Headlamp")
+            shell((0.24, side * 0.18, 0.5), (0.9, 0.09, 0.56), mats["paint"], "SidePanel", rotation=(0, math.radians(-8), side * math.radians(-4)))
+            cars.ellipsoid((0.9, side * 0.085, 0.76), (0.035, 0.055, 0.022), mats["lamp"], "Headlamp")
             tube((0.6, side * 0.17, 0.95), (0.62, side * 0.27, 1.0), 0.006, mats["trim"], "MirrorStem")
             cars.ellipsoid((0.62, side * 0.29, 1.0), (0.012, 0.05, 0.03), mats["paint"], "Mirror")
-        shell((0.12, 0, 0.2), (0.62, 0.26, 0.12), mats["paint"], "BellyPan")
+        shell((0.12, 0, 0.21), (0.7, 0.3, 0.14), mats["paint"], "BellyPan")
     else:
         # Round headlamp in a shell, and a small instrument pod.
         cars.ellipsoid((head.x + 0.2, 0, head.z - 0.04), (0.09, 0.1, 0.1), mats["trim"], "LampShell")
@@ -242,35 +324,42 @@ def build_rider(spec, mats, grips):
     neck = shoulders + Vector((0.07, 0, 0.07))
     head = neck + Vector((0.09 if posture != "upright" else 0.04, 0, 0.12))
 
-    # Torso: hips, a broad chest and the back hump of a race suit.
-    limb(hips, shoulders, 0.165, mats["leather"], "Rider_Torso", taper=1.1)
-    cars.ellipsoid(tuple(hips), (0.17, 0.18, 0.14), mats["leather"], "Rider_Hips")
-    cars.ellipsoid(tuple(shoulders + Vector((-0.02, 0, -0.02))), (0.15, 0.21, 0.14), mats["leather"], "Rider_Chest")
+    # Torso: pelvis, belly, rib cage and the back hump of a race suit.
+    limb(hips, shoulders, 0.15, mats["leather"], "Rider_Torso", taper=1.12)
+    cars.ellipsoid(tuple(hips + Vector((-0.02, 0, 0.0))), (0.19, 0.19, 0.15), mats["leather"], "Rider_Hips")
+    cars.ellipsoid(tuple(hips + Vector((-0.05, 0, -0.06))), (0.17, 0.17, 0.1), mats["leather"], "Rider_Seat")
+    cars.ellipsoid(tuple(hips + (shoulders - hips) * 0.45), (0.155, 0.185, 0.17), mats["leather"], "Rider_Belly")
+    cars.ellipsoid(tuple(shoulders + Vector((-0.03, 0, -0.05))), (0.16, 0.215, 0.17), mats["leather"], "Rider_Chest")
     if posture != "upright":
-        cars.ellipsoid(tuple(shoulders + Vector((-0.1, 0, 0.07))), (0.13, 0.09, 0.06), mats["paint"], "Rider_Hump")
+        shell(tuple(shoulders + Vector((-0.11, 0, 0.06))), (0.3, 0.16, 0.1), mats["paint"], "Rider_Hump", rotation=(0, math.radians(-lean + 8), 0))
 
     # Helmet, visor and chin bar.
     cars.ellipsoid(tuple(head), (0.14, 0.125, 0.135), mats["paint"], "Rider_Helmet")
-    cars.ellipsoid(tuple(head + Vector((0.075, 0, 0.005))), (0.075, 0.1, 0.06), mats["glass"], "Rider_Visor")
-    cars.ellipsoid(tuple(head + Vector((0.07, 0, -0.07))), (0.075, 0.095, 0.05), mats["trim"], "Rider_ChinBar")
-    limb(neck, head, 0.06, mats["leather"], "Rider_Neck")
+    cars.ellipsoid(tuple(head + Vector((0.06, 0, -0.065))), (0.09, 0.105, 0.06), mats["paint"], "Rider_ChinBar")
+    cars.ellipsoid(tuple(head + Vector((0.082, 0, 0.012))), (0.068, 0.098, 0.052), mats["glass"], "Visor")
+    limb(neck - Vector((0.03, 0, 0.04)), head, 0.065, mats["leather"], "Rider_Neck")
 
     for index, side in enumerate((1, -1)):
-        # Arms: shoulder, elbow dropped and out, glove on the grip.
+        # Arms: a rounded shoulder, the elbow dropped and out, the glove closed on the grip.
         shoulder = shoulders + Vector((0, side * 0.2, 0))
-        hand = grips[index] + Vector((0, 0, 0.02))
+        hand = grips[index] + Vector((0, 0, 0.025))
         elbow = (shoulder + hand) / 2 + Vector((-0.04, side * 0.07, -0.1))
-        limb(shoulder, elbow, 0.065, mats["leather"], "Rider_UpperArm", taper=0.85)
-        limb(elbow, hand, 0.055, mats["leather"], "Rider_Forearm", taper=0.8)
-        cars.ellipsoid(tuple(hand), (0.055, 0.045, 0.04), mats["boot"], "Rider_Glove")
-        # Legs: thigh gripping the tank, shin down to the footpeg, boot.
+        cars.ellipsoid(tuple(shoulder + Vector((0, side * 0.01, 0.01))), (0.095, 0.09, 0.09), mats["leather"], "Rider_Shoulder")
+        limb(shoulder, elbow, 0.068, mats["leather"], "Rider_UpperArm", taper=0.84)
+        limb(elbow, hand, 0.058, mats["leather"], "Rider_Forearm", taper=0.72)
+        cars.ellipsoid(tuple(hand), (0.06, 0.05, 0.042), mats["boot"], "Rider_Glove")
+        cars.ellipsoid(tuple(hand + Vector((-0.045, 0, 0.0))), (0.05, 0.046, 0.04), mats["boot"], "Rider_Glove")
+        # Legs: a heavy thigh gripping the tank, the calf, and a boot on the footpeg.
         hip = hips + Vector((0.02, side * 0.12, -0.02))
         knee = Vector((0.12, side * 0.22, 0.70))
-        ankle = Vector((-0.2, side * 0.22, 0.42))
-        limb(hip, knee, 0.085, mats["leather"], "Rider_Thigh", taper=0.78)
-        limb(knee, ankle, 0.065, mats["leather"], "Rider_Shin", taper=0.8)
-        cars.ellipsoid(tuple(knee + Vector((0.03, side * 0.02, 0))), (0.06, 0.05, 0.07), mats["trim"], "Rider_KneeSlider")
-        shell(tuple(ankle + Vector((0.07, 0, -0.05))), (0.26, 0.09, 0.09), mats["boot"], "Rider_Boot", rotation=(0, math.radians(12), 0))
+        ankle = Vector((-0.2, side * 0.22, 0.44))
+        limb(hip, knee, 0.095, mats["leather"], "Rider_Thigh", taper=0.74)
+        limb(knee, ankle, 0.066, mats["leather"], "Rider_Shin", taper=0.74)
+        cars.ellipsoid(tuple(knee + (ankle - knee) * 0.33 + Vector((-0.03, 0, 0.0))), (0.075, 0.068, 0.11), mats["leather"], "Rider_Calf")
+        cars.ellipsoid(tuple(knee + Vector((0.035, side * 0.02, 0.0))), (0.05, 0.045, 0.06), mats["trim"], "KneeSlider")
+        # Boot: ankle cuff, foot and toe as one shape.
+        limb(ankle + Vector((0, 0, 0.1)), ankle, 0.062, mats["boot"], "Rider_Boot", taper=0.95)
+        shell(tuple(ankle + Vector((0.08, 0, -0.05))), (0.27, 0.095, 0.09), mats["boot"], "Rider_Boot", rotation=(0, math.radians(12), 0))
 
 
 def build(asset_id):
@@ -282,6 +371,7 @@ def build(asset_id):
     }
     grips = build_bike(spec, mats)
     build_rider(spec, mats, grips)
+    weld(spec, mats)
     return wheels
 
 
@@ -304,7 +394,7 @@ def main():
         scale_up()
         if "--preview" in arguments:
             cars.PREVIEWS.mkdir(parents=True, exist_ok=True)
-            cars.render_preview(cars.PREVIEWS / f"{asset_id}.png", camera_location=(4.6, -4.4, 1.7), target=(0.0, 0, 0.8))
+            cars.render_preview(cars.PREVIEWS / f"{asset_id}.png", camera_location=(3.5, -3.3, 1.6), target=(0.0, 0, 0.92))
             for obj in list(bpy.context.scene.objects):
                 if obj.type in {"CAMERA", "LIGHT"} or obj.name.startswith("Plane"):
                     bpy.data.objects.remove(obj)
