@@ -52,10 +52,23 @@ def principled(name, color, metallic=0.0, roughness=0.5, coat=0.0, emission=None
     return mat
 
 
-def car_materials(paint):
+def tinted_glass():
+    """Glass you can see the cabin through: dark, glossy and mostly transparent."""
+    mat = principled("Glass_Tinted", (0.02, 0.028, 0.035), metallic=0.85, roughness=0.04)
+    mat.node_tree.nodes["Principled BSDF"].inputs["Alpha"].default_value = 0.42
+    if hasattr(mat, "surface_render_method"):
+        mat.surface_render_method = "BLENDED"
+    else:
+        mat.blend_method = "BLEND"
+    return mat
+
+
+def car_materials(paint, interior=False):
     return {
+        "cabin": principled("Cabin_Trim", (0.022, 0.022, 0.025), roughness=0.85),
+        "seat": principled("Cabin_Seat", (0.07, 0.035, 0.028), roughness=0.6),
         "paint": principled("VehiclePaint", paint, metallic=0.55, roughness=0.28, coat=1.0),
-        "glass": principled("Glass", (0.015, 0.02, 0.025), metallic=0.9, roughness=0.05),
+        "glass": tinted_glass() if interior else principled("Glass", (0.015, 0.02, 0.025), metallic=0.9, roughness=0.05),
         "trim": principled("Trim_Black", (0.012, 0.012, 0.014), roughness=0.45),
         "rubber": principled("Tyre_Rubber", (0.02, 0.02, 0.022), roughness=0.82),
         "alloy": principled("Wheel_Alloy", (0.62, 0.64, 0.66), metallic=1.0, roughness=0.22),
@@ -84,7 +97,7 @@ COUPE_ZONES = ["tail", "deck", "deck", "rearglass", "cpillar", "window", "bpilla
 CARS = {
     # Front-engined sports coupe.
     "car_apex_gp": {
-        "aero": {"splitter": True, "skirts": True, "hood_vents": True, "fender_vents": True, "wing": "low", "diffuser": 4}, "pipes": [0.3, 0.42],
+        "aero": {"splitter": True, "skirts": True, "hood_vents": True, "fender_vents": True, "wing": "low", "diffuser": 4}, "pipes": [0.3, 0.42], "interior": True, "scallop": 0.05, "spokes": 10, "twin": False, "spoke_curve": 0.5, "haunch_rear": 0.045,
         "face": {"lamp_sweep": 0.06, "tail": {"bar": False}},
         "paint": (0.55, 0.02, 0.02), "wheel_radius": 0.345, "tyre_width": 0.27, "wheelbase": 2.66,
         "stations": [
@@ -99,7 +112,7 @@ CARS = {
     },
     # Hot hatch: short, tall, with the roof carried back to a steep tailgate.
     "car_vector_gp": {
-        "aero": {"splitter": True, "skirts": True, "wing": "roof", "diffuser": 3}, "pipes": [0.12], "spokes": 6,
+        "aero": {"splitter": True, "skirts": True, "wing": "roof", "diffuser": 3}, "pipes": [0.12], "spokes": 6, "interior": True, "scallop": 0.03,
         "face": {"grille": 0.56, "lamp_height": 0.1, "tail": {"bar": True, "height": 0.08, "drop": 0.12}},
         "paint": (0.03, 0.30, 0.24), "wheel_radius": 0.33, "tyre_width": 0.25, "wheelbase": 2.56,
         "stations": [
@@ -114,7 +127,7 @@ CARS = {
     },
     # Muscle car: long bonnet, short deck, square shoulders.
     "car_emberline_gp": {
-        "aero": {"splitter": True, "hood_scoop": True, "stripes": True, "wing": "lip", "fender_vents": True}, "pipes": [0.44, 0.56], "waist": 0.02,
+        "aero": {"splitter": True, "hood_scoop": True, "stripes": True, "wing": "lip", "fender_vents": True}, "pipes": [0.44, 0.56], "waist": 0.02, "interior": True, "scallop": 0.035, "twin": False, "haunch_rear": 0.045,
         "face": {"grille": 0.62, "lamp_inner": 0.5, "lamp_sweep": 0.01, "lamp_height": 0.1, "tail": {"bar": True, "height": 0.075}},
         "paint": (0.62, 0.18, 0.02), "wheel_radius": 0.355, "tyre_width": 0.29, "wheelbase": 2.84,
         "stations": [
@@ -129,7 +142,7 @@ CARS = {
     },
     # Mid-engined supercar: low, wide and cab-forward.
     "car_northstar_gp": {
-        "aero": {"splitter": True, "skirts": True, "side_intakes": True, "wing": "high", "diffuser": 6}, "pipes": [0.1], "waist": 0.05, "haunch_rear": 0.05, "haunch_front": 0.07,
+        "aero": {"splitter": True, "skirts": True, "side_intakes": True, "wing": "high", "diffuser": 6}, "pipes": [0.1], "waist": 0.05, "interior": True, "scallop": 0.085, "spokes": 7, "haunch_rear": 0.05, "haunch_front": 0.07,
         "face": {"lamp_sweep": 0.08, "lamp_height": 0.07, "grille": 0.4, "tail": {"bar": True, "height": 0.045, "drop": 0.08}},
         "paint": (0.02, 0.10, 0.36), "wheel_radius": 0.35, "tyre_width": 0.30, "wheelbase": 2.70,
         "stations": [
@@ -302,14 +315,18 @@ def half_section(spec, x, width, bottom, shoulder, roof, cabin):
     waist = spec.get("waist", 0.035) * (1 - flare)
     lift = front * spec.get("haunch_front", 0.018) + rear * spec.get("haunch_rear", 0.03)
     w = width - waist
+    # A scallop pressed into the doors, deepening toward the rear wheel.
+    span = (spec["wheelbase"] / 2 - x) / spec["wheelbase"]
+    ramp = min(1.0, max(0.0, (span - 0.12) / 0.6))
+    scallop = spec.get("scallop", 0.0) * ramp * ramp * (3 - 2 * ramp) * (1 - flare) if 0 < span < 1 else 0.0
     side_height = shoulder - bottom
     rise = roof - shoulder
     belt = w * 0.93
     return [
         (0.0, bottom), (w * 0.72, bottom), (w * 0.93, bottom + 0.035),
-        (w * 0.975 - waist * 0.6, bottom + 0.14),
-        (w * 0.995 - waist * 0.3, bottom + side_height * 0.42),
-        (w + waist * 0.25, bottom + side_height * 0.64),
+        (w * 0.975 - waist * 0.6 - scallop * 0.45, bottom + 0.14),
+        (w * 0.995 - waist * 0.3 - scallop, bottom + side_height * 0.42),
+        (w + waist * 0.25 - scallop * 0.3, bottom + side_height * 0.64),
         (w * 0.985, shoulder - 0.07 + lift), (belt, shoulder + lift),
         (cabin + (belt - cabin) * 0.45, shoulder + rise * 0.1 + lift * 0.6),
         (cabin, shoulder + rise * 0.82), (cabin * 0.74, roof - 0.005), (cabin * 0.38, roof), (0.0, roof),
@@ -364,6 +381,35 @@ def build_body(spec, mats):
     apply_modifiers(body)
     for polygon in body.data.polygons:
         polygon.use_smooth = True
+    if spec.get("interior"):
+        # The inside of the shell, seen through the glass: the same surface without its
+        # windows, drawn a little inside the paint and facing inward.
+        inside = bmesh.new()
+        inside.from_mesh(body.data)
+        reach = arch_radius(spec) + 0.05
+        axle_z = spec["wheel_radius"]
+
+        def at_wheel(face):
+            centre = face.calc_center_median()
+            return abs(centre.y) > 0.3 and min(math.hypot(centre.x - x, centre.z - axle_z) for x in (spec["wheelbase"] / 2, -spec["wheelbase"] / 2)) < reach
+
+        # No lining over the windows or across the wheel openings.
+        bmesh.ops.delete(inside, geom=[face for face in inside.faces if face.material_index == GLASS or at_wheel(face)], context="FACES")
+        inside.normal_update()
+        for vertex in inside.verts:
+            vertex.co -= vertex.normal * 0.014
+        bmesh.ops.reverse_faces(inside, faces=inside.faces)
+        for face in inside.faces:
+            face.material_index = 0
+        lining = bpy.data.meshes.new("CabinLining")
+        inside.to_mesh(lining)
+        inside.free()
+        lining.materials.append(mats["cabin"])
+        shell = bpy.data.objects.new("CabinLining", lining)
+        bpy.context.scene.collection.objects.link(shell)
+        thin = shell.modifiers.new("Reduce", "DECIMATE")       # it is only ever a dark backdrop
+        thin.ratio = 0.3
+        apply_modifiers(shell)
     return body
 
 
@@ -620,7 +666,7 @@ def build_wheel(name, x, side, spec, mats):
             for step in range(7):
                 s = step / 6
                 r = hub * 0.7 + (rim - 0.024 - hub * 0.7) * s
-                angle = math.tau * spoke / count + lean * (0.11 + 0.1 * s) * (0.8 if count > 5 else 1.0)
+                angle = math.tau * spoke / count + lean * (0.11 + 0.1 * s) * (0.8 if count > 5 else 1.0) + spec.get("spoke_curve", 0.0) * s * s * side
                 y = (face - 0.012 - 0.028 * math.sin(math.pi * s) + 0.012 * s) * side
                 across = (0.024 - 0.008 * s) * (1.0 if pairs else 1.7)
                 depth = 0.036 - 0.012 * s
@@ -773,7 +819,7 @@ def build_lamps(skin, spec, mats):
         cast = (-1, -side * 0.55, -0.12)
         corner = lambda y, z: (nose_x, side * y, z)
         skin.patch([corner(inner, lamp_z - lamp_h), corner(outer, lamp_z - lamp_h * 0.7 + sweep_up),
-                    corner(outer, lamp_z + sweep_up + lamp_h * 0.25), corner(inner, lamp_z)], cast, mats["trim"], "LampHousing", lift=0.004)
+                    corner(outer, lamp_z + sweep_up + lamp_h * 0.25), corner(inner, lamp_z)], cast, mats["trim"], "LampHousing", lift=0.004, grazing=0.22)
         skin.patch([corner(inner + 0.02, lamp_z - 0.022), corner(outer - 0.02, lamp_z - 0.02 + sweep_up + lamp_h * 0.22),
                     corner(outer - 0.02, lamp_z - 0.006 + sweep_up + lamp_h * 0.22), corner(inner + 0.02, lamp_z - 0.006)],
                    cast, mats["lamp"], "LampStrip", lift=0.008, step=0.025)
@@ -866,6 +912,51 @@ def build_details(skin, spec, mats):
                     face.material_index = 0 if k < 3 else 1
             pipe = finish(mesh, "Exhaust", mats["chrome"], angle=0.5)
             pipe.data.materials.append(mats["trim"])
+
+
+def build_cabin(spec, mats):
+    """What you see through the glass: two bucket seats, a dashboard with a cowled instrument
+    binnacle, a steering wheel, a centre tunnel and a shelf behind the seats."""
+    marks = spec["marks"]
+    cowl = marks["windshield"][0][1]
+    rear = marks["rearglass"][0][0]
+    floor = min(station[2] for station in spec["stations"]) + 0.27
+    belt = value_at(spec, cowl - 0.6, 3)
+    roof = value_at(spec, cowl - 0.9, 4)
+    reach = value_at(spec, cowl - 0.6, 5)
+    seat_x = cowl - 1.02
+    top = min(roof - 0.2, floor + 0.62)
+    for side in (1, -1):
+        y = side * reach * 0.52
+        box((seat_x + 0.1, y, floor + 0.07), (0.46, 0.44, 0.14), mats["seat"], "SeatCushion", bevel=0.05)
+        box((seat_x - 0.2, y, (floor + top) / 2 + 0.06), (0.14, 0.44, top - floor), mats["seat"], "SeatBack", bevel=0.05, rotation=(0, math.radians(-14), 0))
+        for wing in (-1, 1):
+            box((seat_x - 0.13, y + wing * 0.2, floor + (top - floor) * 0.42), (0.16, 0.06, (top - floor) * 0.6), mats["cabin"], "SeatBolster", bevel=0.025, rotation=(0, math.radians(-14), 0))
+        box((seat_x - 0.3, y, top + 0.1), (0.1, 0.24, 0.17), mats["seat"], "Headrest", bevel=0.04, rotation=(0, math.radians(-10), 0))
+    box((cowl - 0.2, 0, belt - 0.07), (0.42, reach * 1.95, 0.2), mats["cabin"], "Dashboard", bevel=0.06)
+    box((cowl - 0.32, reach * 0.52, belt + 0.04), (0.2, 0.34, 0.09), mats["cabin"], "Binnacle", bevel=0.035)
+    box((cowl - 0.42, 0, belt - 0.06), (0.03, 0.26, 0.15), mats["glass"], "Screen", bevel=0.01, rotation=(0, math.radians(-20), 0))
+    box((seat_x + 0.1, 0, floor + 0.1), (1.1, 0.2, 0.22), mats["cabin"], "Tunnel", bevel=0.04)
+    bpy.ops.mesh.primitive_torus_add(major_radius=0.165, minor_radius=0.016, major_segments=28, minor_segments=8,
+                                     location=(cowl - 0.55, reach * 0.52, belt - 0.01), rotation=(0, math.radians(68), 0))
+    add(bpy.context.object, mats["cabin"]).name = "SteeringWheel"
+    for spoke in (0, 2.1, -2.1):
+        box((cowl - 0.545, reach * 0.52 + 0.08 * math.sin(spoke), belt - 0.01 - 0.08 * math.cos(spoke)), (0.016, 0.035, 0.16), mats["chrome"], "WheelSpoke", bevel=0.006,
+            rotation=(spoke, math.radians(-22), 0))
+    box((cowl - 0.4, reach * 0.52, belt - 0.05), (0.32, 0.06, 0.06), mats["cabin"], "Column", bevel=0.02, rotation=(0, math.radians(-22), 0))
+    if rear < seat_x - 0.45:
+        shelf = value_at(spec, (rear + seat_x) / 2, 3) - 0.03
+        box(((rear + seat_x - 0.4) / 2, 0, shelf), (seat_x - 0.4 - rear, reach * 1.8, 0.05), mats["cabin"], "ParcelShelf", bevel=0.015)
+    # A hoop behind the seats, as in a track car.
+    hoop_x = seat_x - 0.42
+    hoop_top = min(value_at(spec, hoop_x, 4) - 0.07, top + 0.24)
+    hoop_w = value_at(spec, hoop_x, 5) * 0.86
+    sections = []
+    for step in range(13):
+        a = math.pi * step / 12
+        centre = Vector((hoop_x, hoop_w * math.cos(a), floor + (hoop_top - floor) * math.sin(a) ** 0.6))
+        sections.append([tuple(centre + Vector(offset)) for offset in ((0.02, 0, 0.02), (-0.02, 0, 0.02), (-0.02, 0, -0.02), (0.02, 0, -0.02))])
+    sweep(sections, "RollHoop", mats["chrome"], angle=0.9)
 
 
 def plan_strip(spec, x0, x1, inset, z, width, thick, material, name, taper=0.0):
@@ -1050,7 +1141,7 @@ def build_aero_package(skin, spec, mats):
 
 def build_car(spec, race_car=False):
     measure(spec)
-    mats = car_materials(spec["paint"])
+    mats = car_materials(spec["paint"], interior=spec.get("interior", False))
     body = build_body(spec, mats)
     cut_arches(body, spec, mats)
     skin = Skin(body)
@@ -1064,6 +1155,8 @@ def build_car(spec, race_car=False):
             key = f"Wheel_{label}_{side_name}"
             wheels[key] = build_wheel(key, x, side, spec, mats)
     build_details(skin, spec, mats)
+    if spec.get("interior") and "windshield" in spec["marks"] and "rearglass" in spec["marks"]:
+        build_cabin(spec, mats)
     if race_car:
         build_aero_package(skin, spec, mats)
     return wheels

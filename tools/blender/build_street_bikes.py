@@ -136,15 +136,20 @@ def oval(x, half, low, high, count=14, power=2.4, lean=0.0, centre=0.0):
     return ring
 
 
-def loft(rings, name, material, levels=2):
+def loft(rings, name, material, levels=2, crease=0.0, corners=(2, 5, 9, 12)):
     """Bodywork: a skin stretched over a row of cross-sections and smoothed, like a moulded panel."""
     mesh = bmesh.new()
+    layer = mesh.edges.layers.float.new("crease_edge")
     loops = [[mesh.verts.new(point) for point in ring] for ring in rings]
     count = len(loops[0])
     for a, b in zip(loops, loops[1:]):
         for k in range(count):
             n = (k + 1) % count
             mesh.faces.new((a[k], a[n], b[n], b[k]))
+            # ``crease`` keeps the corners of each section as hard lines along the panel, which
+            # is what makes a fairing read as folded sheet rather than a pebble.
+            if crease and k in corners:
+                mesh.edges.get((a[k], b[k]))[layer] = crease
     mesh.faces.new(loops[0][::-1])
     mesh.faces.new(loops[-1])
     bmesh.ops.recalc_face_normals(mesh, faces=mesh.faces)
@@ -161,6 +166,23 @@ def loft(rings, name, material, levels=2):
     for polygon in obj.data.polygons:
         polygon.use_smooth = True
     return obj
+
+
+def facet(x, half, low, high, chamfer=0.34, centre=0.0, lean=0.0, peak=0.0):
+    """A folded-sheet cross-section: a rectangle with its corners cut, as a ring of eight points.
+    ``peak`` lifts the middle of the top edge into a ridge."""
+    middle, tall = (low + high) / 2, (high - low) / 2
+    c = chamfer
+    ring = [(1, -1 + c), (1, 1 - c), (1 - c, 1), (-1 + c, 1), (-1, 1 - c), (-1, -1 + c), (-1 + c, -1), (1 - c, -1)]
+    return [(x + lean * v * tall, centre + half * u, middle + tall * v + (peak if v == 1 else 0.0)) for u, v in ring]
+
+
+def panel(rings, name, material, per=4):
+    """A fairing panel: flat faces meeting at hard edges, flowing smoothly along its length."""
+    count = len(rings[0])
+    tracks = [catmull([ring[k] for ring in rings], per) for k in range(count)]
+    sections = [[tuple(track[i]) for track in tracks] for i in range(len(tracks[0]))]
+    return cars.sweep(sections, name, material, angle=0.42)
 
 
 def arc_guard(axle, radius, start, end, half, material, name, steps=14):
@@ -329,8 +351,8 @@ def build_bike(spec, mats):
         arc_guard((REAR_AXLE, 0, REAR_RADIUS + 0.16), REAR_RADIUS + 0.03, 40, 150, 0.1, mats["paint"], "RearGuard")
         tail_tip = Vector((-0.86, 0, 0.72))
     else:
-        tail = loft([oval(-0.06, 0.12, 0.72, 0.84), oval(-0.3, 0.155, 0.74, 0.83), oval(-0.5, 0.15, 0.78, 0.91), oval(-0.7, 0.11, 0.85, 0.975, power=3.0),
-                     oval(-0.88, 0.05, 0.93, 0.985, power=3.0)], "Tail", mats["paint"])
+        tail = panel([facet(-0.06, 0.12, 0.72, 0.84), facet(-0.3, 0.155, 0.74, 0.83), facet(-0.5, 0.15, 0.78, 0.91, peak=0.01), facet(-0.7, 0.11, 0.86, 0.975, peak=0.012),
+                      facet(-0.92, 0.035, 0.965, 1.0)], "Tail", mats["paint"])
         loft([oval(-0.07, 0.1, 0.815, 0.862, power=3.2), oval(-0.28, 0.14, 0.812, 0.858, power=3.2), oval(-0.46, 0.13, 0.84, 0.905, power=3.2)], "Seat", mats["seat"])
         loft([oval(-0.5, 0.11, 0.88, 0.93, power=3.2), oval(-0.62, 0.1, 0.9, 0.965, power=3.2), oval(-0.76, 0.07, 0.945, 0.985, power=3.2)], "PillionPad", mats["seat"])
         tail_skin = cars.Skin(tail)
@@ -369,22 +391,21 @@ def build_bike(spec, mats):
     if faired:
         screen = spec.get("screen", 1.0)
         # Upper cowl: a pointed nose opening out to the width of the bars.
-        cowl = loft([oval(1.0, 0.03, 0.73, 0.77, power=3), oval(0.95, 0.1, 0.69, 0.83, power=3), oval(0.85, 0.165, 0.67, 0.9, power=3), oval(0.7, 0.2, 0.66, 0.95, power=3),
-                     oval(0.55, 0.21, 0.66, 0.965, power=3), oval(0.44, 0.185, 0.68, 0.93, power=3)], "Cowl", mats["paint"])
+        cowl = panel([facet(1.04, 0.02, 0.715, 0.74), facet(0.97, 0.09, 0.685, 0.8), facet(0.86, 0.16, 0.665, 0.875, peak=0.01), facet(0.7, 0.2, 0.655, 0.93, peak=0.02),
+                      facet(0.55, 0.21, 0.655, 0.95, peak=0.02), facet(0.44, 0.185, 0.68, 0.92)], "Cowl", mats["paint"])
         loft([oval(0.88, 0.07, 0.865, 0.9), oval(0.77, 0.12, 0.91, 0.965 + 0.05 * screen), oval(0.63, 0.14, 0.93, 1.0 + 0.1 * screen),
               oval(0.53, 0.12, 0.94, 1.0 + 0.11 * screen)], "Screen", mats["glass"])
         nose = cars.Skin(cowl)
         for side in (1, -1):
             cast = (-1, -side * 0.35, -0.1)
             at = lambda y, z: (1.0, side * y, z)
-            nose.patch([at(0.03, 0.74), at(0.15, 0.78), at(0.16, 0.835), at(0.035, 0.778)], cast, mats["trim"], "LampHousing", lift=0.004, step=0.02)
-            nose.patch([at(0.045, 0.753), at(0.095, 0.77), at(0.098, 0.796), at(0.048, 0.776)], cast, mats["lamp"], "Headlamp", lift=0.008, step=0.012)
-            nose.patch([at(0.105, 0.78), at(0.145, 0.795), at(0.148, 0.824), at(0.108, 0.806)], cast, mats["lamp"], "Headlamp", lift=0.008, step=0.012)
+            nose.patch([at(0.02, 0.735), at(0.165, 0.79), at(0.185, 0.875), at(0.03, 0.79)], cast, mats["trim"], "LampHousing", lift=0.004, step=0.02)
+            nose.patch([at(0.035, 0.752), at(0.155, 0.798), at(0.17, 0.856), at(0.042, 0.787)], cast, mats["lamp"], "Headlamp", lift=0.008, step=0.012)
             # Side panel: a slab from behind the front wheel down to the belly, with gill vents.
-            panel = loft([oval(0.62, 0.022, 0.52, 0.8, power=6, centre=side * 0.175), oval(0.44, 0.03, 0.27, 0.84, power=6, centre=side * 0.185),
-                          oval(0.2, 0.032, 0.2, 0.72, power=6, centre=side * 0.2), oval(-0.04, 0.03, 0.19, 0.56, power=6, centre=side * 0.19),
-                          oval(-0.24, 0.022, 0.21, 0.4, power=6, centre=side * 0.15)], "SidePanel", mats["paint"])
-            side_skin = cars.Skin(panel)
+            flank = panel([facet(0.64, 0.02, 0.56, 0.78, centre=side * 0.17), facet(0.46, 0.028, 0.27, 0.84, centre=side * 0.185),
+                           facet(0.2, 0.03, 0.2, 0.72, centre=side * 0.2), facet(-0.04, 0.028, 0.19, 0.55, centre=side * 0.19),
+                           facet(-0.26, 0.018, 0.22, 0.38, centre=side * 0.15)], "SidePanel", mats["paint"])
+            side_skin = cars.Skin(flank)
             for gill in range(3):
                 gx = 0.2 + gill * 0.075
                 side_skin.ribbon(cars.line((gx, 0, 0.42), (gx + 0.06, 0, 0.6), 0.02), (0, -side, 0), 0.03, mats["trim"], "Gill", lift=0.004)
@@ -393,8 +414,7 @@ def build_bike(spec, mats):
             cars.sweep([[(0.86, side * 0.14, 0.7), (0.72, side * 0.17, 0.69), (0.72, side * 0.17, 0.705), (0.84, side * 0.14, 0.712)],
                         [(0.8, side * 0.265, 0.715), (0.73, side * 0.265, 0.71), (0.73, side * 0.265, 0.722), (0.79, side * 0.265, 0.726)]], "Winglet", mats["carbon"], angle=0.4)
         nose.patch([(1.0, -0.022, 0.7), (1.0, 0.022, 0.7), (1.0, 0.018, 0.735), (1.0, -0.018, 0.735)], (-1, 0, -0.05), mats["trim"], "RamAir", lift=0.004, step=0.01)
-        loft([oval(0.38, 0.13, 0.15, 0.3, power=3.2), oval(0.12, 0.17, 0.12, 0.3, power=3.2), oval(-0.14, 0.15, 0.13, 0.3, power=3.2), oval(-0.3, 0.09, 0.17, 0.3, power=3.2)],
-             "BellyPan", mats["carbon"])
+        panel([facet(0.4, 0.1, 0.17, 0.3), facet(0.14, 0.165, 0.12, 0.3), facet(-0.14, 0.15, 0.13, 0.3), facet(-0.32, 0.07, 0.19, 0.3)], "BellyPan", mats["carbon"])
     else:
         # Round headlamp in a bowl, with a rim; the scrambler adds a number board, the naked a fly screen.
         lamp = Vector((head.x + 0.2, 0, head.z - 0.03))
