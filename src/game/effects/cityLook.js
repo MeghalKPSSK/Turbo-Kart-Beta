@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { hangSigns } from './roadDressing.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -241,6 +242,7 @@ export const TREE_SPECIES = ['tree_island', 'tree_round', 'tree_tall'];
 const CHUNK = 90;
 const NEAR = 48;
 const FAR = 380;
+const MID = 170;      // with a horizon set, real tree models stop here and crowns take over
 
 export function treeParts(model) {
     model.updateMatrixWorld(true);
@@ -281,7 +283,40 @@ function recolourLeaves(material) {
     material.customProgramCacheKey = () => 'recolour-leaves';
 }
 
-export function plantTrees(scene, trees, species, { shadows, detailed, tint = null, recolour = false }) {
+// A far-off tree is a few dozen triangles: a lumpy crown the size and place of the real one.
+// Forests on the horizon cost almost nothing this way.
+function distantCrown(parts) {
+    const box = new THREE.Box3();
+    for (const part of parts) {
+        if (!part.leafy) continue;
+        part.geometry.computeBoundingBox();
+        box.union(part.geometry.boundingBox);
+    }
+    if (box.isEmpty()) for (const part of parts) { part.geometry.computeBoundingBox(); box.union(part.geometry.boundingBox); }
+    const size = box.getSize(new THREE.Vector3());
+    const centre = box.getCenter(new THREE.Vector3());
+    const geometry = new THREE.IcosahedronGeometry(1, 1);
+    const position = geometry.attributes.position;
+    for (let i = 0; i < position.count; i += 1) {
+        const x = position.getX(i), y = position.getY(i), z = position.getZ(i);
+        const lump = 0.8 + 0.34 * Math.abs(Math.sin(x * 7.1 + y * 3.3) * Math.cos(z * 5.7 + y));
+        // Narrower toward the top, like a real crown seen from far off.
+        const taper = 1 - 0.35 * Math.max(0, y);
+        position.setXYZ(i, centre.x + x * size.x * 0.36 * lump * taper, centre.y + y * size.y * 0.5 * lump, centre.z + z * size.z * 0.36 * lump * taper);
+    }
+    geometry.computeVertexNormals();
+    return geometry;
+}
+
+const CROWN_GREEN = new THREE.Color(0.085, 0.13, 0.055);
+const CROWN_DULL = new THREE.Color(0.1, 0.09, 0.05);
+
+// `horizon`: how far away trees are still drawn at all (as distant crowns beyond FAR).
+export function plantTrees(scene, trees, species, { shadows, detailed, tint = null, recolour = false, horizon = 0 }) {
+    const crowns = horizon ? species.map(({ far }) => distantCrown(far)) : null;
+    const crownMaterial = horizon ? new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1.0 }) : null;
+    const far = horizon ? MID : FAR;
+    const crownColour = new THREE.Color();
     if (tint && recolour) {
         for (const { near, far } of species) for (const part of [...near, ...far]) if (part.leafy) recolourLeaves(part.material);
     }
@@ -295,7 +330,8 @@ export function plantTrees(scene, trees, species, { shadows, detailed, tint = nu
     const dummy = new THREE.Object3D();
     const groups = [];
     for (const { kind, list } of chunks.values()) {
-        const { near, far } = species[kind];
+        const near = species[kind].near;
+        const farParts = species[kind].far;
         const centre = new THREE.Vector3();
         for (const tree of list) centre.add(new THREE.Vector3(...tree.position));
         centre.divideScalar(list.length);
@@ -321,7 +357,27 @@ export function plantTrees(scene, trees, species, { shadows, detailed, tint = nu
             scene.add(group);
             return group;
         };
-        groups.push({ centre, near: detailed ? build(near, shadows) : null, far: build(far, false) });
+        let crown = null;
+        if (crowns) {
+            crown = new THREE.InstancedMesh(crowns[kind], crownMaterial, list.length);
+            list.forEach((tree, index) => {
+                dummy.position.set(...tree.position);
+                dummy.rotation.set(0, tree.yaw, 0);
+                dummy.scale.setScalar(tree.scale);
+                dummy.updateMatrix();
+                crown.setMatrixAt(index, dummy.matrix);
+                const colour = tint ? tint(tree, index) : null;
+                if (!colour || colour.r + colour.g + colour.b > 2.95) crownColour.copy(CROWN_GREEN);
+                else if (recolour) crownColour.copy(colour).multiplyScalar(0.2).lerp(CROWN_DULL, 0.35);     // foliage in shade, not paint
+                else crownColour.copy(CROWN_GREEN).multiply(colour);
+                crown.setColorAt(index, crownColour);
+            });
+            crown.instanceMatrix.needsUpdate = true;
+            crown.instanceColor.needsUpdate = true;
+            crown.computeBoundingSphere();
+            scene.add(crown);
+        }
+        groups.push({ centre, near: detailed ? build(near, shadows) : null, far: build(farParts, false), crown });
     }
     return {
         update(camera) {
@@ -329,7 +385,8 @@ export function plantTrees(scene, trees, species, { shadows, detailed, tint = nu
                 const distance = group.centre.distanceTo(camera.position);
                 const close = Boolean(group.near) && distance < NEAR;
                 if (group.near) group.near.visible = close;
-                group.far.visible = !close && distance < FAR;
+                group.far.visible = !close && distance < far;
+                if (group.crown) group.crown.visible = distance >= far && distance < horizon;
             }
         },
         dispose() {
@@ -339,7 +396,9 @@ export function plantTrees(scene, trees, species, { shadows, detailed, tint = nu
                     scene.remove(item);
                     for (const mesh of item.children) mesh.dispose();
                 }
+                if (group.crown) { scene.remove(group.crown); group.crown.dispose(); }
             }
+            if (crowns) { for (const geometry of crowns) geometry.dispose(); crownMaterial.dispose(); }
             for (const { near, far } of species) for (const part of [...near, ...far]) { part.geometry.dispose(); part.material.dispose(); }
         }
     };
@@ -401,6 +460,9 @@ export async function createCityLook({ renderer, scene, camera, trackScene, meta
     const trees = plantTrees(scene, meta.trees || [], species,
         { shadows: quality.shadows > 0, detailed: quality.particles >= 0.8 });
 
+    // Blade signs on the building fronts along the route.
+    const signs = hangSigns(scene, trackScene, meta);
+
     // Bloom makes the lamps and lit windows glow. It needs its own multisampled target.
     let composer = null;
     if (quality.bloom !== false && quality.shadows > 0) {
@@ -420,6 +482,7 @@ export async function createCityLook({ renderer, scene, camera, trackScene, meta
         resize(width, height) { composer?.setSize(width, height); },
         dispose() {
             trees.dispose();
+            signs.dispose();
             composer?.dispose();
             envMap.dispose();
             background.dispose();

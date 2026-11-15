@@ -13,14 +13,14 @@ const MODELS = resolve(dirname(fileURLToPath(import.meta.url)), '../../public/mo
 // Per theme: how high trees grow (metres above the lowest road point), how many, and how
 // far from the road the forest reaches.
 const FOREST = {
-    mountain_adventure: { treeline: 46, count: 520, reach: 210 },
-    canyon: { treeline: 44, count: 300, reach: 175 },
-    island: { treeline: 48, count: 260, reach: 180 },
+    mountain_adventure: { treeline: 46, count: 1100, reach: 210 },
+    canyon: { treeline: 44, count: 420, reach: 175 },
+    island: { treeline: 48, count: 420, reach: 180 },
     volcano: { treeline: 28, count: 0, reach: 120 },
-    ice: { treeline: 42, count: 180, reach: 170 },
-    jungle: { treeline: 58, count: 560, reach: 200 },
+    ice: { treeline: 42, count: 260, reach: 170 },
+    jungle: { treeline: 58, count: 950, reach: 200 },
     industrial: { treeline: 36, count: 100, reach: 140 },
-    coastal_sunset: { treeline: 55, count: 300, reach: 190 },
+    coastal_sunset: { treeline: 55, count: 460, reach: 190 },
     default: { treeline: 60, count: 420, reach: 190 }
 };
 
@@ -81,7 +81,7 @@ for (const id of process.argv.slice(2)) {
     const metaPath = resolve(MODELS, `${id}.track.json`);
     const meta = JSON.parse(readFileSync(metaPath, 'utf8'));
     const track = new TrackModel(meta);
-    const terrain = collectTriangles(readGlb(resolve(MODELS, `${id}.glb`)), /_Terrain_(Base|Rock|High)$/);
+    const terrain = collectTriangles(readGlb(resolve(MODELS, `${id}.glb`)), /_Terrain_(Base|Rock|High|LightPatches|ShadowPatches)$/);
     const sample = terrainSampler(terrain);
     const rules = FOREST[meta.theme] || FOREST.default;
     const random = seeded([...id].reduce((sum, ch) => sum * 31 + ch.charCodeAt(0), 7));

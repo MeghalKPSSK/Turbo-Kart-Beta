@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { loadProgress } from '../loadProgress.js';
+import { fillSea, paintLanes, raiseMountains, scatterRocks } from './roadDressing.js';
 import { TREE_SPECIES, loadBackdrop, loadImage, loadModel, loadSky, plantTrees, surface, tiled, treeParts } from './cityLook.js';
 
 // The look of the scenic circuits. Like the city look, it dresses the Blender export at load
@@ -57,8 +58,24 @@ export const SCENIC_THEMES = {
     }
 };
 
-const HIDDEN = /_(Scenery_Canopy|Scenery_Canopy_Light|Scenery_Trunk|Scenery_SnowTips|Terrain_LightPatches|Terrain_ShadowPatches)$/;
-const TERRAIN = /_Terrain_(Base|Rock|High)$/;
+// The country around each circuit: how high the distant ranges stand (metres; `terraces` steps
+// them into canyon walls, `gap` opens the ring toward the sea) and how much loose rock lies about.
+const COUNTRY = {
+    mountain_adventure: { mountains: { height: 540 }, rocks: { count: 620, reach: 90 } },
+    canyon: { mountains: { height: 320, terraces: 5 }, rocks: { count: 380, size: 1.3 } },
+    island: { mountains: { height: 0 }, rocks: { count: 140 } },
+    volcano: { mountains: { height: 440 }, rocks: { count: 380, size: 1.2 } },
+    ice: { mountains: { height: 500 }, rocks: { count: 260 } },
+    jungle: { mountains: { height: 300 }, rocks: { count: 160 } },
+    industrial: { mountains: { height: 170 }, rocks: { count: 80 } },
+    coastal_sunset: { mountains: { height: 340, gap: 0.42 }, rocks: { count: 260 } }
+};
+
+const HIDDEN = /_(Scenery_Canopy|Scenery_Canopy_Light|Scenery_Trunk|Scenery_SnowTips|Ridge_Silhouette)$/;
+// Rock props exported as plain shapes: boulders, cliffs, sea stacks. They take the landscape's rock.
+const ROCKY = /_(Scenery_Boulder|Crater_Rock|Ice_Ridge|SeaStack_Coral|Falls_Cliff|Beacon_Stone)$/;
+// The light and shadow patches are cells of the same landscape, coloured differently.
+const TERRAIN = /_Terrain_(Base|Rock|High|LightPatches|ShadowPatches)$/;
 
 // One material for the whole landscape. Textures are projected from three sides (so cliffs
 // are not stretched) and blended: rock where it is steep, meadow where it is flat, snow on
@@ -88,10 +105,15 @@ function terrainMaterial({ meadow, rock, snow, snowline, tint }) {
                 w /= (w.x + w.y + w.z);
                 float patchy = texture2D(tMeadow, vTerrainPos.xz * 0.0031).g;
                 float veins = texture2D(tRock, vTerrainPos.xz * 0.0043).r;
-                vec3 meadow = threeSided(tMeadow, vTerrainPos, w, 0.085) * mix(0.7, 1.2, patchy) * vec3(0.74, 0.98, 0.58);
+                vec3 meadow = threeSided(tMeadow, vTerrainPos, w, 0.085) * mix(0.75, 1.25, patchy) * vec3(0.6, 1.0, 0.44);
                 vec3 rock = threeSided(tRock, vTerrainPos, w, 0.045) * mix(0.78, 1.18, veins);
                 vec3 snow = threeSided(tSnow, vTerrainPos, w, 0.06) * 1.08;
                 float rockiness = 1.0 - smoothstep(0.6, 0.86, tn.y + (patchy - 0.5) * 0.14);
+                // Crags and scree: bands of bare rock break through the grass wherever the
+                // ground tilts at all, so a hillside is never one flat colour.
+                float crag = texture2D(tRock, vTerrainPos.xz * 0.0017 + 0.31).g + texture2D(tMeadow, vTerrainPos.zx * 0.0061).r * 0.5;
+                rockiness = max(rockiness, smoothstep(0.62, 0.8, crag + (1.0 - tn.y) * 1.7) * 0.9);
+                rock *= mix(0.62, 1.0, texture2D(tRock, vTerrainPos.xz * 0.011).r);
                 float snowiness = smoothstep(uSnowline - 22.0, uSnowline + 30.0, vTerrainPos.y + (patchy - 0.5) * 46.0 + (veins - 0.5) * 30.0) * smoothstep(0.3, 0.68, tn.y);
                 diffuseColor.rgb = mix(mix(meadow, rock, rockiness), snow, snowiness) * uTerrainTint;`);
     };
@@ -106,17 +128,19 @@ function smoothTerrain(mesh) {
     for (const name of Object.keys(geometry.attributes)) if (name !== 'position') geometry.deleteAttribute(name);
     const welded = mergeVertices(geometry, 0.01);
     welded.computeVertexNormals();
-    // The export winds the landscape so that it faces down (it was drawn two-sided). Turn it
-    // to face the sky, or the single-sided material would cull every triangle.
-    const normal = welded.attributes.normal;
-    let up = 0;
-    for (let i = 0; i < normal.count; i += 1) up += normal.getY(i);
-    if (up < 0) {
-        const index = welded.index.array;
-        for (let i = 0; i < index.length; i += 3) { const swap = index[i + 1]; index[i + 1] = index[i + 2]; index[i + 2] = swap; }
-        welded.index.needsUpdate = true;
-        welded.computeVertexNormals();
+    // The export winds the landscape inconsistently (it was drawn two-sided): some triangles
+    // face down. It is a height field, so turn every triangle to face the sky, or the
+    // single-sided material would leave holes where they are culled.
+    const position = welded.attributes.position;
+    const index = welded.index.array;
+    for (let i = 0; i < index.length; i += 3) {
+        const a = index[i], b = index[i + 1], c = index[i + 2];
+        const ux = position.getX(b) - position.getX(a), uz = position.getZ(b) - position.getZ(a);
+        const vx = position.getX(c) - position.getX(a), vz = position.getZ(c) - position.getZ(a);
+        if (uz * vx - ux * vz < 0) { index[i + 1] = c; index[i + 2] = b; }
     }
+    welded.index.needsUpdate = true;
+    welded.computeVertexNormals();
     welded.userData.smoothed = true;
     mesh.geometry = welded;
 }
@@ -166,6 +190,7 @@ export async function createScenicLook({ renderer, scene, camera, trackScene, me
         if (HIDDEN.test(name)) { object.visible = false; return; }
         let material = null;
         if (TERRAIN.test(name)) { smoothTerrain(object); material = terrain; object.castShadow = false; }
+        else if (ROCKY.test(name)) material = terrain;
         else if (/_Track_Asphalt$/.test(name)) { material = asphalt; object.castShadow = false; }
         else if (/_Barrier_Guardrail$/.test(name)) material = rail;
         else if (/_Barrier_Support$/.test(name)) material = post;
@@ -174,6 +199,16 @@ export async function createScenicLook({ renderer, scene, camera, trackScene, me
         material.name = name;       // the physics still finds the road by material name
         object.material = material;
     });
+
+    // Beyond the exported landscape: lane lines on the road, broken rock on the verges and
+    // a ring of mountains on the horizon, all in the same rock, meadow and snow.
+    const country = COUNTRY[meta.theme] || {};
+    const dressing = [
+        paintLanes(scene, trackScene, meta),
+        scatterRocks(scene, trackScene, meta, terrain, country.rocks),
+        raiseMountains(scene, meta, terrain, country.mountains),
+        fillSea(scene, trackScene)
+    ];
 
     // Sky: the HDR lights the scene and feeds reflections, the photograph is what you see.
     const generator = new THREE.PMREMGenerator(renderer);
@@ -213,6 +248,7 @@ export async function createScenicLook({ renderer, scene, camera, trackScene, me
         shadows: quality.shadows > 0,
         detailed: quality.particles >= 0.8,
         recolour: Boolean(theme.recolour),
+        horizon: 700,
         tint: (tree, index) => palette[Math.abs(index * 13 + Math.floor(tree.position[2])) % palette.length]
     });
 
@@ -223,6 +259,7 @@ export async function createScenicLook({ renderer, scene, camera, trackScene, me
         resize() {},
         dispose() {
             trees.dispose();
+            for (const item of dressing) item.dispose();
             envMap.dispose();
             background.dispose();
             for (const map of terrainMaps) map.dispose();
