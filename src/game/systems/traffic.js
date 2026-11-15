@@ -12,127 +12,47 @@ import { quaternionFromForward } from '../physics/vehicle.js';
 // Both are reported to the collision rules as hazards, and rivals steer round them through
 // `track.traffic` (see ai/driver.js hazardAvoidance).
 
-// Body styles: size in metres and the side profile the body is extruded from.
+// Body styles and their sizes in metres. The models are built by
+// tools/blender/build_street_cars.py and exported as models/blender/traffic_<kind>.glb.
 const KINDS = {
-    hatch: { width: 1.78, length: 4.0, height: 1.46, wheel: 0.31, axle: 1.25 },
-    sedan: { width: 1.84, length: 4.7, height: 1.42, wheel: 0.32, axle: 1.42 },
-    van: { width: 1.98, length: 5.2, height: 2.05, wheel: 0.35, axle: 1.6 },
-    truck: { width: 2.3, length: 7.0, height: 2.9, wheel: 0.45, axle: 2.2 },
-    bus: { width: 2.5, length: 10.5, height: 3.0, wheel: 0.48, axle: 3.2 }
+    hatch: { width: 1.81, length: 4.11, height: 1.5 },
+    sedan: { width: 1.83, length: 4.69, height: 1.46 },
+    van: { width: 1.92, length: 5.0, height: 1.97 },
+    truck: { width: 2.4, length: 7.05, height: 3.1 },
+    bus: { width: 2.5, length: 10.5, height: 3.02 }
 };
 const KIND_MIX = ['sedan', 'hatch', 'van', 'sedan', 'truck', 'hatch', 'sedan', 'bus', 'hatch', 'van'];
 const PAINTS = [0xe9e9e4, 0x9aa3ab, 0x1c1f24, 0x20365c, 0x8c1f1f, 0xd9a520, 0x3f5d4a, 0xc9c2b2, 0x55606b];
 const LANES = [-9.2, -3.2, 3.2, 9.2];
 
-// Side profiles as [distance along the vehicle (0 = rear, 1 = nose), height (0..1)].
-const PROFILES = {
-    hatch: [[0, 0.2], [0, 0.62], [0.06, 0.94], [0.2, 1], [0.6, 1], [0.76, 0.64], [0.97, 0.56], [1, 0.44], [1, 0.2]],
-    sedan: [[0, 0.22], [0, 0.6], [0.15, 0.66], [0.27, 0.98], [0.38, 1], [0.62, 1], [0.76, 0.66], [0.97, 0.58], [1, 0.44], [1, 0.22]],
-    van: [[0, 0.16], [0, 0.94], [0.03, 1], [0.8, 1], [0.9, 0.62], [0.99, 0.52], [1, 0.36], [1, 0.16]],
-    truck: [[0.72, 0.16], [0.72, 0.74], [0.74, 0.78], [0.9, 0.78], [0.95, 0.52], [1, 0.46], [1, 0.16]],
-    bus: [[0, 0.14], [0, 0.96], [0.012, 1], [0.985, 1], [1, 0.9], [1, 0.14]]
-};
-// Window band as [from, to] along the vehicle and [bottom, top] in height.
-const GLASS = {
-    hatch: [0.1, 0.72, 0.66, 0.95], sedan: [0.3, 0.72, 0.68, 0.95], van: [0.6, 0.88, 0.62, 0.92],
-    truck: [0.76, 0.93, 0.5, 0.72], bus: [0.03, 0.97, 0.5, 0.86]
-};
+// The model files a race with traffic needs, for the loader.
+export const TRAFFIC_MODELS = Object.keys(KINDS).map((kind) => ({ kind, file: `traffic_${kind}.glb` }));
 
-const shared = { geometry: new Map(), glass: null, tyre: null, lamp: null, tail: null, plate: null, cargo: null };
-
-function materials() {
-    if (!shared.glass) {
-        shared.glass = new THREE.MeshStandardMaterial({ color: 0x0c1218, roughness: 0.12, metalness: 0.7 });
-        shared.tyre = new THREE.MeshStandardMaterial({ color: 0x0b0b0c, roughness: 0.9 });
-        shared.lamp = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0xfff0d6, emissiveIntensity: 4 });
-        shared.tail = new THREE.MeshStandardMaterial({ color: 0x220000, emissive: 0xff2010, emissiveIntensity: 7 });
-        shared.plate = new THREE.MeshStandardMaterial({ color: 0xd8d8d0, emissive: 0xffffff, emissiveIntensity: 0.5 });
-        shared.cargo = new THREE.MeshStandardMaterial({ color: 0xd8d6cf, roughness: 0.7 });
-    }
-    return shared;
-}
-
-// Extrudes a side profile across the vehicle's width, nose toward +Z, standing on y = 0.
-function bodyGeometry(kind) {
-    const key = `body:${kind}`;
-    if (!shared.geometry.has(key)) {
-        const { width, length, height } = KINDS[kind];
-        const shape = new THREE.Shape();
-        PROFILES[kind].forEach(([along, up], index) => {
-            const x = (along - 0.5) * length;
-            const y = up * height;
-            if (index === 0) shape.moveTo(x, y); else shape.lineTo(x, y);
-        });
-        shape.closePath();
-        const bevel = 0.07;
-        const geometry = new THREE.ExtrudeGeometry(shape, { depth: width - bevel * 2, bevelEnabled: true, bevelSize: bevel, bevelThickness: bevel, bevelSegments: 3, curveSegments: 4 });
-        geometry.translate(0, 0, -(width - bevel * 2) / 2);
-        geometry.rotateY(-Math.PI / 2);     // profile x (rear to nose) becomes +Z
-        shared.geometry.set(key, geometry);
-    }
-    return shared.geometry.get(key);
-}
-
-function box(key, x, y, z) {
-    if (!shared.geometry.has(key)) shared.geometry.set(key, new THREE.BoxGeometry(x, y, z));
-    return shared.geometry.get(key);
-}
-
-function wheelGeometry(radius) {
-    const key = `wheel:${radius}`;
-    if (!shared.geometry.has(key)) {
-        const geometry = new THREE.CylinderGeometry(radius, radius, 0.24, 18);
-        geometry.rotateZ(Math.PI / 2);
-        shared.geometry.set(key, geometry);
-    }
-    return shared.geometry.get(key);
-}
-
-// A civilian vehicle. Returns the group and its hazard-light material (stalled vehicles flash it).
-function buildVehicle(kind, paint, castShadow) {
-    const size = KINDS[kind];
-    const m = materials();
-    const group = new THREE.Group();
-    const add = (geometry, material, x, y, z) => {
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.set(x, y, z);
-        mesh.castShadow = castShadow;
-        mesh.receiveShadow = true;
-        group.add(mesh);
-        return mesh;
-    };
-    const paintMaterial = new THREE.MeshStandardMaterial({ color: paint, roughness: 0.38, metalness: 0.35 });
-    add(bodyGeometry(kind), paintMaterial, 0, 0, 0);
-    if (kind === 'truck') {
-        // The load box behind the cab.
-        add(box('cargo', size.width, size.height * 0.78, size.length * 0.7), m.cargo, 0, size.height * 0.61, -size.length * 0.14);
-    }
-    const [from, to, bottom, top] = GLASS[kind];
-    const glassLength = (to - from) * size.length;
-    add(box(`glass:${kind}`, size.width + 0.02, (top - bottom) * size.height, glassLength), m.glass,
-        0, (bottom + top) / 2 * size.height, ((from + to) / 2 - 0.5) * size.length);
-    for (const z of [size.axle, -size.axle]) {
-        for (const side of [1, -1]) add(wheelGeometry(size.wheel), m.tyre, side * (size.width / 2 - 0.03), size.wheel, z);
-    }
-    // What makes a box read as a vehicle from behind: bumpers, wide tail lights, a rear window
-    // and a number plate.
-    const tall = kind === 'van' || kind === 'truck' || kind === 'bus';
-    const lampY = kind === 'bus' ? 0.75 : size.height * (kind === 'truck' ? 0.2 : tall ? 0.36 : 0.5);
-    const rear = -size.length / 2;
-    const nose = size.length / 2;
-    const hazard = new THREE.MeshStandardMaterial({ color: 0x221500, emissive: 0xffa010, emissiveIntensity: 0 });
-    add(box(`bumper:${kind}`, size.width + 0.04, 0.2, 0.16), m.tyre, 0, lampY - 0.28, rear);
-    add(box(`bumper:${kind}`, size.width + 0.04, 0.2, 0.16), m.tyre, 0, lampY - 0.28, nose);
-    add(box('plate', 0.5, 0.13, 0.05), m.plate, 0, lampY - 0.05, rear - 0.07);
-    if (tall && kind !== 'truck') add(box(`rearglass:${kind}`, size.width * 0.74, size.height * 0.26, 0.05), m.glass, 0, size.height * 0.74, rear - 0.06);
-    for (const side of [1, -1]) {
-        const x = side * (size.width / 2 - 0.3);
-        add(box('lamp', 0.36, 0.16, 0.08), m.lamp, x, lampY, nose + 0.04);
-        add(tall ? box('tail:tall', 0.16, 0.5, 0.08) : box('tail', 0.46, 0.17, 0.08), m.tail, tall ? side * (size.width / 2 - 0.12) : x, lampY + (tall ? 0.25 : 0), rear - 0.06);
-        add(box('blinker', 0.18, 0.16, 0.09), hazard, side * (size.width / 2 - 0.1), lampY + (tall ? 0.62 : 0.17), rear - 0.06);
-        add(box('blinker', 0.18, 0.16, 0.09), hazard, side * (size.width / 2 - 0.1), lampY - 0.16, nose + 0.04);
-    }
-    return { group, hazard, paintMaterial };
+// A civilian vehicle cloned from its model. Returns the group, its wheels (to spin) and its
+// own tail-lamp material (stalled vehicles flash it as hazard lights).
+function buildVehicle(models, kind, paint, castShadow) {
+    const group = models.get(kind).clone(true);
+    const colour = new THREE.Color(paint);
+    const owned = [];
+    let lamps = null;
+    const wheels = [];
+    group.traverse((child) => {
+        if (child.name.startsWith('WheelPivot_')) wheels.push(child);
+        if (!child.isMesh) return;
+        child.castShadow = castShadow;
+        child.receiveShadow = true;
+        const name = child.material.name || '';
+        if (/VehiclePaint/i.test(name)) {
+            child.material = child.material.clone();
+            child.material.color.copy(colour);
+            owned.push(child.material);
+        } else if (/Lamp_Tail/.test(name)) {
+            child.material = child.material.clone();
+            lamps = child.material;
+            owned.push(child.material);
+        }
+    });
+    return { group, wheels, lamps, owned };
 }
 
 function seeded(seed) {
@@ -157,8 +77,9 @@ export function stalledVehicles(hazards = []) {
 }
 
 export class TrafficSystem {
-    // options: count (moving vehicles), seed, shadows, moving (false = stalled vehicles only)
-    constructor(scene, physics, track, { count = 8, seed = 1, shadows = true, moving = true } = {}) {
+    // options: models (kind -> loaded scene), count (moving vehicles), seed, shadows,
+    // moving (false = stalled vehicles only)
+    constructor(scene, physics, track, { models, count = 8, seed = 1, shadows = true, moving = true } = {}) {
         this.scene = scene;
         this.physics = physics;
         this.track = track;
@@ -171,12 +92,12 @@ export class TrafficSystem {
         track.traffic = this.view;
 
         track.hazards.forEach((hazard, index) => {
-            const { group, hazard: blinker, paintMaterial } = buildVehicle(hazard.kind || 'sedan', PAINTS[(index * 3 + 2) % PAINTS.length], shadows);
+            const { group, lamps, owned } = buildVehicle(models, hazard.kind || 'sedan', PAINTS[(index * 3 + 2) % PAINTS.length], shadows);
             group.position.set(hazard.position[0], hazard.position[1], hazard.position[2]);
             group.rotation.y = hazard.yaw;
             scene.add(group);
-            this.stalled.push({ group, blinker });
-            this.owned.push(blinker, paintMaterial);
+            this.stalled.push({ group, lamps });
+            this.owned.push(...owned);
         });
 
         if (!moving) return;
@@ -184,9 +105,9 @@ export class TrafficSystem {
         for (let index = 0; index < count; index += 1) {
             const kind = KIND_MIX[index % KIND_MIX.length];
             const size = KINDS[kind];
-            const { group, hazard: blinker, paintMaterial } = buildVehicle(kind, PAINTS[Math.floor(this.random() * PAINTS.length)], shadows);
+            const { group, wheels, owned } = buildVehicle(models, kind, PAINTS[Math.floor(this.random() * PAINTS.length)], shadows);
             scene.add(group);
-            this.owned.push(blinker, paintMaterial);
+            this.owned.push(...owned);
             const body = physics.world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setCanSleep(false));
             const collider = physics.world.createCollider(
                 RAPIER.ColliderDesc.cuboid(size.width / 2, size.height / 2 - 0.12, size.length / 2)
@@ -197,7 +118,7 @@ export class TrafficSystem {
                 body
             );
             const entry = {
-                id: `traffic_${index}`, style: 'traffic', kind, size, group, body, collider,
+                id: `traffic_${index}`, style: 'traffic', kind, size, group, wheels, body, collider,
                 s: 0, lane: LANES[(index * 3 + 1) % LANES.length], speed: 0,
                 cruise: (kind === 'bus' || kind === 'truck' ? 19 : 23) + this.random() * 7,
                 mode: 'driving', timer: 0, half: [size.width / 2, size.height / 2, size.length / 2],
@@ -328,9 +249,11 @@ export class TrafficSystem {
             if (!Number.isFinite(t.x + t.y + t.z)) continue;
             entry.group.position.set(t.x, t.y, t.z);
             entry.group.quaternion.set(r.x, r.y, r.z, r.w);
+            if (entry.mode === 'driving') for (const wheel of entry.wheels) wheel.rotation.x += (entry.speed / 0.34) * dt;
         }
-        const flash = Math.floor(this.time * 2.4) % 2 ? 7 : 0;
-        for (const { blinker } of this.stalled) blinker.emissiveIntensity = flash;
+        // Stalled vehicles flash their tail lamps as hazard lights.
+        const flash = Math.floor(this.time * 2.4) % 2 ? 9 : 0.4;
+        for (const { lamps } of this.stalled) if (lamps) lamps.emissiveIntensity = flash;
     }
 
     dispose() {

@@ -134,6 +134,75 @@ CARS = {
 }
 
 
+def station_row(x, half, bottom, shoulder, roof, cabin):
+    return (x, half, bottom, shoulder, roof, cabin)
+
+
+def bus_stations():
+    """A bus is a long box of windows: a pillar strip between each pair of window strips."""
+    body = (1.25, 0.34, 1.25, 3.02, 1.21)
+    rows = [(-5.25, 1.12, 0.50, 1.25, 2.90, 1.10), (-5.15, 1.24, 0.38, 1.25, 3.00, 1.20)]
+    for x in (-4.6, -4.5, -2.6, -2.5, -0.6, -0.5, 1.4, 1.5, 3.4, 3.5, 4.9):
+        rows.append((x, *body))
+    rows += [(5.15, 1.22, 0.38, 1.25, 2.98, 1.18), (5.25, 1.10, 0.50, 1.25, 2.85, 1.06)]
+    return rows
+
+
+# Road traffic, built with the same lofter at a lower level of detail.
+TRAFFIC = {
+    "traffic_sedan": {
+        "paint": (0.55, 0.57, 0.60), "wheel_radius": 0.33, "tyre_width": 0.22, "wheelbase": 2.80, "smooth": 2, "spokes": 5,
+        "stations": [
+            (-2.35, 0.72, 0.44, 0.86, None, 0.0), (-2.27, 0.86, 0.34, 0.94, None, 0.0), (-1.95, 0.90, 0.26, 0.98, None, 0.0),
+            (-1.55, 0.91, 0.22, 0.99, 1.03, 0.64), (-1.05, 0.915, 0.21, 0.98, 1.40, 0.70), (-0.97, 0.915, 0.21, 0.98, 1.42, 0.705),
+            (-0.22, 0.915, 0.21, 0.96, 1.46, 0.72), (-0.16, 0.915, 0.21, 0.96, 1.46, 0.72), (0.50, 0.91, 0.21, 0.94, 1.38, 0.72),
+            (0.58, 0.91, 0.21, 0.935, 1.35, 0.725), (1.00, 0.905, 0.22, 0.92, 0.96, 0.74), (1.40, 0.90, 0.23, 0.88, None, 0.0),
+            (1.85, 0.88, 0.25, 0.82, None, 0.0), (2.15, 0.84, 0.30, 0.74, None, 0.0), (2.29, 0.76, 0.36, 0.66, None, 0.0),
+            (2.34, 0.62, 0.42, 0.60, None, 0.0),
+        ],
+        "zones": COUPE_ZONES,
+    },
+    "traffic_hatch": {
+        "paint": (0.70, 0.70, 0.66), "wheel_radius": 0.31, "tyre_width": 0.20, "wheelbase": 2.56, "smooth": 2, "spokes": 5,
+        "stations": [
+            (-2.05, 0.72, 0.44, 0.86, None, 0.0), (-1.97, 0.85, 0.33, 0.94, None, 0.0), (-1.80, 0.89, 0.25, 0.98, 1.05, 0.66),
+            (-1.40, 0.90, 0.22, 0.98, 1.44, 0.70), (-1.32, 0.90, 0.22, 0.98, 1.46, 0.705), (-0.42, 0.905, 0.21, 0.96, 1.50, 0.72),
+            (-0.36, 0.905, 0.21, 0.96, 1.50, 0.72), (0.36, 0.90, 0.21, 0.94, 1.42, 0.72), (0.44, 0.90, 0.21, 0.935, 1.39, 0.725),
+            (0.90, 0.895, 0.22, 0.92, 0.97, 0.74), (1.30, 0.89, 0.23, 0.88, None, 0.0), (1.70, 0.86, 0.26, 0.81, None, 0.0),
+            (1.90, 0.82, 0.31, 0.73, None, 0.0), (2.02, 0.73, 0.37, 0.65, None, 0.0), (2.06, 0.60, 0.43, 0.60, None, 0.0),
+        ],
+        "zones": ["tail", "deck", "rearglass", "cpillar", "window", "bpillar", "window", "apillar", "windshield",
+                  "hood", "hood", "hood", "lamp", "nose"],
+    },
+    "traffic_van": {
+        "paint": (0.85, 0.85, 0.82), "wheel_radius": 0.36, "tyre_width": 0.24, "wheelbase": 3.10, "smooth": 2, "spokes": 5,
+        "stations": [
+            (-2.50, 0.84, 0.42, 1.00, 1.86, 0.80), (-2.42, 0.94, 0.32, 1.02, 1.95, 0.86), (-1.20, 0.96, 0.26, 1.02, 1.97, 0.87),
+            (0.20, 0.96, 0.26, 1.00, 1.97, 0.87), (0.28, 0.96, 0.26, 1.00, 1.97, 0.87), (1.05, 0.955, 0.26, 0.98, 1.92, 0.86),
+            (1.13, 0.955, 0.26, 0.975, 1.88, 0.86), (1.75, 0.95, 0.27, 0.96, 1.05, 0.84), (2.20, 0.92, 0.30, 0.86, None, 0.0),
+            (2.42, 0.84, 0.36, 0.74, None, 0.0), (2.50, 0.70, 0.42, 0.66, None, 0.0),
+        ],
+        "zones": ["tail", "panel", "panel", "bpillar", "window", "apillar", "windshield", "hood", "lamp", "nose"],
+    },
+    "traffic_truck": {
+        "paint": (0.20, 0.30, 0.55), "wheel_radius": 0.46, "tyre_width": 0.30, "wheelbase": 4.40, "smooth": 2, "spokes": 5,
+        "stations": [
+            (-3.50, 1.15, 0.60, 1.30, 3.00, 1.12), (-3.40, 1.20, 0.55, 1.30, 3.10, 1.18), (1.00, 1.20, 0.55, 1.30, 3.10, 1.18),
+            (1.10, 1.15, 0.50, 1.30, 3.05, 1.12), (1.35, 1.10, 0.42, 1.25, 2.45, 1.00), (1.45, 1.10, 0.42, 1.25, 2.50, 1.02),
+            (2.30, 1.10, 0.42, 1.22, 2.45, 1.02), (2.38, 1.10, 0.42, 1.22, 2.42, 1.02), (2.90, 1.08, 0.44, 1.20, 1.30, 1.00),
+            (3.30, 1.04, 0.48, 1.05, None, 0.0), (3.48, 0.95, 0.54, 0.90, None, 0.0), (3.55, 0.80, 0.60, 0.82, None, 0.0),
+        ],
+        "zones": ["tail", "panel", "panel", "panel", "bpillar", "window", "apillar", "windshield", "hood", "lamp", "nose"],
+    },
+    "traffic_bus": {
+        "paint": (0.80, 0.62, 0.10), "wheel_radius": 0.50, "tyre_width": 0.30, "wheelbase": 6.00, "smooth": 2, "spokes": 5,
+        "stations": bus_stations(),
+        "zones": ["tail", "panel", "cpillar", "window", "bpillar", "window", "bpillar", "window", "bpillar", "window",
+                  "bpillar", "window", "lamp", "nose"],
+    },
+}
+
+
 def measure(spec):
     """Fills in the sizes the builders need from the stations."""
     stations = spec["stations"]
@@ -226,8 +295,8 @@ def build_body(spec, mats):
     for key in ("paint", "glass", "trim", "lamp", "tail"):
         data.materials.append(mats[key])
     subsurf = body.modifiers.new("Smooth", "SUBSURF")
-    subsurf.levels = 3
-    subsurf.render_levels = 3
+    subsurf.levels = spec.get("smooth", 3)
+    subsurf.render_levels = spec.get("smooth", 3)
     apply_modifiers(body)
     for polygon in body.data.polygons:
         polygon.use_smooth = True
@@ -259,8 +328,10 @@ def cut_arches(body, spec, mats):
     bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 0.3))
     tub = bpy.context.object
     tub.name = "Underbody"
-    tub.location = (0, 0, 0.3)
-    tub.scale = (spec["wheelbase"] + 0.9, spec["half_width"] * 1.4, 0.2)
+    # Sits just inside the floor, so it shows through the arches but never below the sills.
+    floor = min(station[2] for station in spec["stations"])
+    tub.location = (0, 0, floor + 0.16)
+    tub.scale = (spec["wheelbase"] + 0.9, spec["half_width"] * 1.4, 0.22)
     tub.data.materials.append(mats["trim"])
 
 
@@ -283,7 +354,7 @@ def build_wheel(name, x, side, spec, mats):
     z = radius
     parts = []
     # Tyre: a torus squashed to a flat tread with round shoulders.
-    bpy.ops.mesh.primitive_torus_add(major_radius=radius - 0.075, minor_radius=0.075, major_segments=56, minor_segments=14,
+    bpy.ops.mesh.primitive_torus_add(major_radius=radius - 0.075, minor_radius=0.075, major_segments=56 if spec.get("smooth", 3) > 2 else 28, minor_segments=14 if spec.get("smooth", 3) > 2 else 8,
                                      location=(x, y, z), rotation=(math.pi / 2, 0, 0))
     tyre = bpy.context.object
     tyre.scale = (1.0, 1.0, width / 0.15)
@@ -296,8 +367,9 @@ def build_wheel(name, x, side, spec, mats):
                                      location=(x, y + side * width * 0.4, z), rotation=(math.pi / 2, 0, 0))
     parts.append(add(bpy.context.object, mats["alloy"]))
     # Spokes: slim tapered blades from hub to rim.
-    for spoke in range(10):
-        angle = math.tau * spoke / 10
+    spokes = spec.get("spokes", 10)
+    for spoke in range(spokes):
+        angle = math.tau * spoke / spokes
         bpy.ops.mesh.primitive_cube_add(size=1, location=(x + math.cos(angle) * rim_radius * 0.54, y + side * width * 0.36,
                                                           z + math.sin(angle) * rim_radius * 0.54))
         blade = bpy.context.object
@@ -344,10 +416,11 @@ def build_details(spec, mats):
     stations = spec["stations"]
     tail_x = stations[0][0]
     # The station at the foot of the windscreen: the mirrors sit just behind it.
-    foot = stations[spec["zones"].index("windshield") + 1]
+    foot = stations[spec["zones"].index("windshield") + 1] if "windshield" in spec["zones"] else None
     for side in (1, -1):
-        ellipsoid((foot[0] - 0.12, side * (foot[5] + 0.14), foot[3] + 0.09), (0.085, 0.055, 0.05), mats["paint"], "Mirror")
-        box((foot[0] - 0.12, side * (foot[5] + 0.07), foot[3] + 0.065), (0.05, 0.12, 0.02), mats["trim"], "MirrorStalk")
+        if foot:
+            ellipsoid((foot[0] - 0.12, side * (foot[5] + 0.14), foot[3] + 0.09), (0.085, 0.055, 0.05), mats["paint"], "Mirror")
+            box((foot[0] - 0.12, side * (foot[5] + 0.07), foot[3] + 0.065), (0.05, 0.12, 0.02), mats["trim"], "MirrorStalk")
         bpy.ops.mesh.primitive_cylinder_add(vertices=20, radius=0.05, depth=0.16, location=(tail_x + 0.1, side * 0.36, stations[0][2] - 0.08),
                                             rotation=(0, math.pi / 2, 0))
         add(bpy.context.object, mats["chrome"]).name = "Exhaust"
@@ -478,11 +551,12 @@ def render_preview(path):
 
 def main():
     arguments = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    wanted = [name for name in arguments if not name.startswith("--")] or list(CARS)
+    everything = {**CARS, **TRAFFIC}
+    wanted = [name for name in arguments if not name.startswith("--")] or list(everything)
     EXPORT_DIR.mkdir(parents=True, exist_ok=True)
     for asset_id in wanted:
         bpy.ops.wm.read_factory_settings(use_empty=True)
-        spec = CARS[asset_id]
+        spec = everything[asset_id]
         wheels = build_car(spec)
         print(f"{asset_id}: length {spec['length']:.2f} width {spec['half_width'] * 2:.2f} height {spec['height']:.2f} "
               f"wheelbase {spec['wheelbase']:.2f} track {spec['track']:.3f} radius {spec['wheel_radius']:.3f}")

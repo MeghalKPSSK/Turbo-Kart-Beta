@@ -18,7 +18,7 @@ import { NitroEffect, glowTexture } from '../effects/nitroFx.js';
 import { SkidMarks } from '../effects/skidMarks.js';
 import { GameAudio } from '../audio/gameAudio.js';
 import { createCityLook } from '../effects/cityLook.js';
-import { TrafficSystem, stalledVehicles } from './traffic.js';
+import { TrafficSystem, TRAFFIC_MODELS, stalledVehicles } from './traffic.js';
 import { WreckFx } from '../effects/wreckFx.js';
 import { buildAssist } from '../physics/assist.js';
 import { loadProgress } from '../loadProgress.js';
@@ -87,7 +87,10 @@ const NITRO_PICKUP_GAIN = 0.35;
 // the physics engine, vehicle models and, when known, the route.
 export function preloadRace({ trackId = null, vehicles = false } = {}) {
     const loads = [loadRapier()];
-    if (vehicles) for (const vehicle of ROAD_VEHICLES) loads.push(loadAsset(vehicle.model));
+    if (vehicles) {
+        for (const vehicle of ROAD_VEHICLES) loads.push(loadAsset(vehicle.model));
+        for (const item of TRAFFIC_MODELS) loads.push(loadAsset(item.file));
+    }
     if (trackId) loads.push(loadAsset(`${trackId}.glb`));
     return Promise.allSettled(loads);
 }
@@ -164,19 +167,23 @@ export class RoadRaceGame {
         const wait = (promise) => loadProgress.track(promise);
         // Only the vehicles that are in this race: a time trial needs one model, not eight.
         const needed = ROAD_VEHICLES.filter((v) => this.vehiclesInRace().has(v.id));
-        const [meta, trackScene, RAPIER, vehicleAssets] = await Promise.all([
+        // Traffic models, unless this event promises an empty road.
+        const trafficFiles = this.event?.type === 'timeTrial' ? [] : TRAFFIC_MODELS;
+        const [meta, trackScene, RAPIER, vehicleAssets, trafficAssets] = await Promise.all([
             wait(fetch(`${modelBase}${info.id}.track.json`).then((response) => {
                 if (!response.ok) throw new Error(`Track data unavailable for ${info.name}.`);
                 return response.json();
             })),
             wait(loadAsset(`${info.id}.glb`)),
             wait(loadRapier()),
-            Promise.all(needed.map(async (v) => [v.id, await wait(loadAsset(v.model))]))
+            Promise.all(needed.map(async (v) => [v.id, await wait(loadAsset(v.model))])),
+            Promise.all(trafficFiles.map(async (item) => [item.kind, await wait(loadAsset(item.file))]))
         ]);
         if (this.disposed) return;
         if (!meta.route || meta.version < 2) throw new Error(`${info.name} needs its Blender track data rebuilt.`);
 
         this.vehicleAssets = new Map(vehicleAssets);
+        this.trafficAssets = new Map(trafficAssets);
         // The obstacles are vehicles: the track's fixed hazards become stalled cars (none in a
         // time trial, which promises an empty road) and moving traffic is added below.
         const emptyRoad = this.event?.type === 'timeTrial';
@@ -229,7 +236,7 @@ export class RoadRaceGame {
 
         this.traffic = new TrafficSystem(this.scene, this.physics, this.model, {
             count: emptyRoad ? 0 : Math.max(4, Math.min(16, Math.round(this.model.length / 150 * this.quality.particles))),
-            seed: this.model.count, shadows, moving: !emptyRoad
+            models: this.trafficAssets, seed: this.model.count, shadows, moving: !emptyRoad
         });
         this.createRacers();
         for (let i = 0; i < 90; i += 1) this.physics.step(); // let the grid settle on its suspension
