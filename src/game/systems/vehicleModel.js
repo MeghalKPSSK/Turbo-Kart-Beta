@@ -15,11 +15,12 @@ function paintMaterial(source, color) {
     const material = source.clone();
     if ((material.name || '').toLowerCase().includes('vehiclepaint')) {
         material.color.copy(color);
-        material.roughness = 0.31;
-        material.metalness = 0.16;
+        // Metallic paint under a glossy lacquer, which is what catches the sky and street lights.
+        material.roughness = 0.3;
+        material.metalness = 0.5;
         if ('clearcoat' in material) {
-            material.clearcoat = 0.34;
-            material.clearcoatRoughness = 0.24;
+            material.clearcoat = 1;
+            material.clearcoatRoughness = 0.07;
         }
         if (material.emissive) material.emissive.set(0x000000);
     }

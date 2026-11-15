@@ -31,3 +31,6 @@ __pycache__/
 
 # Raw downloaded source assets (see tools/assets/fetch_polyhaven.py)
 assets/polyhaven/
+
+# Blender preview renders
+assets/previews/

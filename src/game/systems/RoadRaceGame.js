@@ -362,8 +362,8 @@ export class RoadRaceGame {
     // The tail light brightens under braking (see updateVisuals).
     addLights(visual, vehicleInfo, isPlayer) {
         const bike = vehicleInfo.type === 'BIKE';
-        const front = bike ? 1.18 : 2.18;
-        const rear = bike ? -1.2 : -1.9;
+        const front = bike ? 1.18 : vehicleInfo.dims.length / 2 - 0.12;
+        const rear = bike ? -1.2 : -vehicleInfo.dims.length / 2;
         const height = bike ? 1.02 : 0.58;
         const lamp = (color, intensity, x, y, z, width) => {
             const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, 0.09, 0.06),
@@ -372,12 +372,16 @@ export class RoadRaceGame {
             visual.lean.add(mesh);
             return mesh;
         };
-        if (bike) lamp(0xfff1d6, 3.5, 0, height, front, 0.2);
-        else for (const side of [0.5, -0.5]) lamp(0xfff1d6, 3.5, side, height, front, 0.26);
-        const tail = bike ? [lamp(0xff2418, 3, 0, 0.98, rear, 0.18)] : [lamp(0xff2418, 3, 0, 0.72, rear, 0.9)];
+        // A model with its own lamps (the street cars) lights those; the rest get lamp bars.
+        let tail = visual.materials.filter((material) => /Lamp_Tail/.test(material.name)).map((material) => ({ material }));
+        if (!tail.length) {
+            if (bike) lamp(0xfff1d6, 3.5, 0, height, front, 0.2);
+            else for (const side of [0.5, -0.5]) lamp(0xfff1d6, 3.5, side, height, front, 0.26);
+            tail = bike ? [lamp(0xff2418, 3, 0, 0.98, rear, 0.18)] : [lamp(0xff2418, 3, 0, 0.72, rear, 0.9)];
+        }
         let beam = null;
         if (isPlayer) {
-            beam = new THREE.SpotLight(0xfff0d8, 260, 90, 0.5, 0.9, 1.5);
+            beam = new THREE.SpotLight(0xfff0d8, 95, 90, 0.5, 0.9, 1.5);
             beam.position.set(0, height + 0.15, front);
             beam.target.position.set(0, -0.4, front + 30);
             visual.lean.add(beam, beam.target);

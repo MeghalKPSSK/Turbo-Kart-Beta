@@ -677,6 +677,14 @@ export class Vehicle {
             if (!wrecked) this.steerInAir(dt);
         }
 
+        // Tip-over guard: a car leaning hard (one side up a kicker or a kerb, or thrown sideways
+        // off one) is pulled back toward upright instead of going over. A wrecked car is left
+        // to tumble.
+        if (!wrecked && up.y < 0.82) {
+            const pull = (0.82 - up.y) * 16 * spec.mass * dt;
+            body.applyTorqueImpulse({ x: -up.z * pull, y: 0, z: up.x * pull }, true);
+        }
+
         // Bookkeeping for the next readState().
         this._lastLatForce = latImpulseSum;
         this._lastLongForce = longImpulseSum;

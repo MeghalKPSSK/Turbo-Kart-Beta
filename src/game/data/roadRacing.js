@@ -1,31 +1,34 @@
 // Physical dimensions measured from the Blender models (metres, vehicle space: +Z forward,
 // +Y up, origin on the ground between the wheels). `tools/sim/verify-assets.mjs` re-checks
 // these numbers against the exported GLB files.
-const carDims = (frontZ, rearZ, frontR, rearR) => ({
-    wheelbase: frontZ - rearZ,
+// Street cars (tools/blender/build_street_cars.py). `cabin` is [rear z, front z] of the
+// glasshouse. The cabin gets its own massless collision box so a car on its roof rests on the
+// roof instead of sinking into the road; verify-assets checks the boxes against the model.
+const carDims = ({ wheelbase, track, radius, length, width, roof, cabin, cabinWidth }) => ({
+    wheelbase,
     wheels: [
-        { name: 'FL', x: 1.04, y: frontR, z: frontZ, radius: frontR, steered: true, driven: true, front: true },
-        { name: 'FR', x: -1.04, y: frontR, z: frontZ, radius: frontR, steered: true, driven: true, front: true },
-        { name: 'RL', x: 1.12, y: rearR, z: rearZ, radius: rearR, steered: false, driven: true, front: false },
-        { name: 'RR', x: -1.12, y: rearR, z: rearZ, radius: rearR, steered: false, driven: true, front: false }
+        { name: 'FL', x: track, y: radius, z: wheelbase / 2, radius, steered: true, driven: true, front: true },
+        { name: 'FR', x: -track, y: radius, z: wheelbase / 2, radius, steered: true, driven: true, front: true },
+        { name: 'RL', x: track, y: radius, z: -wheelbase / 2, radius, steered: false, driven: true, front: false },
+        { name: 'RR', x: -track, y: radius, z: -wheelbase / 2, radius, steered: false, driven: true, front: false }
     ],
-    // `parts` are extra, massless collision boxes that cover what stands above the tub (the
-    // cockpit / halo column and the rear wing), so a flipped car rests on them instead of
-    // sinking into the road. verify-assets checks them against the model.
     body: {
-        half: [1.2, 0.32, 2.05],
-        center: [0, 0.82, 0.2],
+        // The box starts half a metre up: a low nose then rides up a ramp on its wheels instead
+        // of digging its chin in, and a car straddling the edge of a kicker is not beached on it.
+        half: [width / 2, 0.25, length / 2],
+        center: [0, 0.75, 0],
         parts: [
-            { half: [0.5, 0.52, 0.7], center: [0, 1.55, 0.2] },     // cockpit, halo and airbox
-            { half: [0.5, 0.45, 0.55], center: [0, 1.35, -0.9] },   // engine cover
-            { half: [1.25, 0.27, 0.32], center: [0, 1.8, -1.8] }    // rear wing
+            { half: [cabinWidth, (roof - 0.9) / 2 + 0.03, (cabin[1] - cabin[0]) / 2], center: [0, (roof + 0.9) / 2, (cabin[0] + cabin[1]) / 2] }
         ]
     },
     comHeight: 0.4,
     mass: 1000,
-    length: 4.24,
-    width: 2.7,
-    exhausts: [{ x: 0.2, y: 0.74, z: -1.86 }, { x: -0.2, y: 0.74, z: -1.86 }]
+    length,
+    width,
+    // A road car's narrow track tips easily when one side climbs a kicker; resist roll as a
+    // wider car would, so jumps stay the fun kind.
+    inertiaWidth: 2.7,
+    exhausts: [{ x: 0.36, y: 0.34, z: -length / 2 + 0.05 }, { x: -0.36, y: 0.34, z: -length / 2 + 0.05 }]
 });
 
 // Bikes are simulated on four narrow, all-wheel-driven contact points so they stay upright
@@ -96,41 +99,41 @@ export const ROAD_VEHICLES = [
     },
     {
         id: 'car_apex_gp',
-        dims: carDims(1.209, -1.246, 0.49, 0.51),
-        name: 'Apex Grand Prix',
+        dims: carDims({ wheelbase: 2.66, track: 0.795, radius: 0.345, length: 4.52, width: 1.93, roof: 1.27, cabin: [-1.45, 0.94], cabinWidth: 0.74 }),
+        name: 'Apex GT',
         type: 'CAR',
         model: 'car_apex_gp.glb',
-        description: 'An open-wheel single-seater with a low nose, broad wings, and a cockpit driver.',
+        description: 'A front-engined sports coupe: balanced, quick and happy to slide.',
         stats: { speed: 5, acceleration: 4, handling: 4, armor: 3 },
         defaultPaint: 0xe83e2d
     },
     {
         id: 'car_vector_gp',
-        dims: carDims(1.209, -1.246, 0.5, 0.52),
-        name: 'Vector Grand Prix',
+        dims: carDims({ wheelbase: 2.56, track: 0.795, radius: 0.33, length: 4.11, width: 1.91, roof: 1.42, cabin: [-1.8, 0.9], cabinWidth: 0.76 }),
+        name: 'Vector RS',
         type: 'CAR',
         model: 'car_vector_gp.glb',
-        description: 'A sharp, compact formula racer tuned for quick direction changes and clean exits.',
+        description: 'A hot hatch: short, light on its feet and sharp into every corner.',
         stats: { speed: 4, acceleration: 5, handling: 5, armor: 3 },
         defaultPaint: 0x138e7a
     },
     {
         id: 'car_emberline_gp',
-        dims: carDims(1.283, -1.321, 0.49, 0.52),
-        name: 'Emberline Grand Prix',
+        dims: carDims({ wheelbase: 2.84, track: 0.8, radius: 0.355, length: 4.82, width: 1.96, roof: 1.33, cabin: [-1.55, 0.62], cabinWidth: 0.78 }),
+        name: 'Emberline V8',
         type: 'CAR',
         model: 'car_emberline_gp.glb',
-        description: 'A broad-winged formula racer with a short wheelbase and strong corner exit.',
+        description: 'A long-bonnet muscle car with strong corner exits and a tough shell.',
         stats: { speed: 4, acceleration: 5, handling: 5, armor: 4 },
         defaultPaint: 0xe1a333
     },
     {
         id: 'car_northstar_gp',
-        dims: carDims(1.283, -1.321, 0.5, 0.51),
-        name: 'Northstar Grand Prix',
+        dims: carDims({ wheelbase: 2.7, track: 0.815, radius: 0.35, length: 4.56, width: 2.0, roof: 1.16, cabin: [-1.25, 1.12], cabinWidth: 0.72 }),
+        name: 'Northstar S',
         type: 'CAR',
         model: 'car_northstar_gp.glb',
-        description: 'A narrow-nose single-seater built for stable high-speed runs and clean braking.',
+        description: 'A low, wide mid-engined supercar: the fastest machine in the league.',
         stats: { speed: 5, acceleration: 4, handling: 4, armor: 4 },
         defaultPaint: 0x176bdb
     }

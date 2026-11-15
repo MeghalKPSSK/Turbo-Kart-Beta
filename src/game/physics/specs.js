@@ -41,7 +41,8 @@ export function buildVehicleSpec(vehicle, upgrades = {}, { gravity = DEFAULT_GRA
     }));
 
     const length = dims.length;
-    const width = dims.width;
+    // Roll and yaw inertia may be given a wider stance than the bodywork (see carDims).
+    const width = dims.inertiaWidth || dims.width;
     const inertia = {
         x: mass * (length * length / 12 + 0.08) * 1.1,
         y: mass * (length * length + width * width) / 12 * (isBike ? 0.62 : 0.78),

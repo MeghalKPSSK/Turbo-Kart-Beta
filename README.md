@@ -1,7 +1,7 @@
 # Turbo Road League
 
 Turbo Road League is an original road-racing game built around Blender-authored
-open-wheel cars, rider-equipped bikes, and closed scenic circuits. You race eight
+street cars, rider-equipped bikes, city streets and scenic circuits. You race eight
 rivals: steer, brake, drift, boost, jump the ramps, and ram rivals hard enough for a
 takedown. The game has no music.
 
@@ -75,19 +75,18 @@ checks the source.
 
 ## Blender vehicle assets
 
-- Editable source: `assets/blender/turbo_road_vehicles.blend`
-- Eight Blender models: four bikes (Nightjar Streetfighter, Vector Trackbike,
-  Driftwood Scrambler, Solstice Endurance) and four open-wheel cars (Apex,
-  Vector, Emberline, and Northstar Grand Prix)
-- Exported models: `public/models/blender/bike_nightjar.glb`,
-  `bike_vector.glb`, `bike_driftwood.glb`, `bike_solstice.glb`,
-  `car_apex_gp.glb`, `car_vector_gp.glb`, `car_emberline_gp.glb`, and
-  `car_northstar_gp.glb`
-- Generator: `tools/blender/build_road_vehicles.py`
+- **Street cars:** four cars built by `tools/blender/build_street_cars.py`: the
+  Apex GT (sports coupe), Vector RS (hot hatch), Emberline V8 (muscle car) and
+  Northstar S (mid-engined supercar). Each is a smooth lofted body with cut
+  wheel arches, a glazed cabin, alloy wheels with brake discs, and lamps.
+  Add `-- --preview` to render a picture of each into `assets/previews/`.
+- **Bikes:** four bikes built by `tools/blender/build_road_vehicles.py`
+  (Nightjar Streetfighter, Vector Trackbike, Driftwood Scrambler, Solstice
+  Endurance), with editable source in `assets/blender/turbo_road_vehicles.blend`.
+- Exported models are in `public/models/blender/`.
 
-Each formula car has four visible wheels, open-wheel bodywork, a cockpit, and a
-helmeted driver. Paint selection recolors the Blender model, while power, grip,
-and armor upgrades change race performance and durability.
+Paint selection recolours the model; power, grip and armour upgrades change race
+performance and durability.
 
 ## Blender race environments
 
