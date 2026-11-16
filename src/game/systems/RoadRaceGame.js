@@ -10,6 +10,7 @@ import { ProgressTracker } from '../physics/progress.js';
 import { AIDriver } from '../ai/driver.js';
 import { CollisionSystem } from './collisions.js';
 import { gridSlot, placeOnRoad, recoverVehicle, needsRecovery } from './raceRules.js';
+import { contactShadow } from '../effects/contactShadow.js';
 import { createVehicleVisual, updateVehicleVisual } from './vehicleModel.js';
 import { CoinField, NitroPickups } from './pickups.js';
 import { CameraRig } from './cameraRig.js';
@@ -29,6 +30,12 @@ const modelBase = `${import.meta.env.BASE_URL || '/'}models/blender/`;
 const modelCache = new Map();
 // Longest frame the loop will simulate in one go (slower machines slow down below 10 fps).
 const MAX_FRAME_TIME = 0.1;
+const SHADOW_EXTENT = 70;    // half-width in metres of the area around the player that gets sun shadows
+const _sunDir = new THREE.Vector3();
+const _sunRight = new THREE.Vector3();
+const _sunUp = new THREE.Vector3();
+const _sunAnchor = new THREE.Vector3();
+const _worldUp = new THREE.Vector3(0, 1, 0);
 const HEADLIGHT = 95;        // candela of the player's headlight beam
 const MAX_STEPS_PER_FRAME = Math.ceil(MAX_FRAME_TIME / FIXED_DT);
 
@@ -309,10 +316,11 @@ export class RoadRaceGame {
         this.sun = new THREE.DirectionalLight(0xffe1c2, 3.1);
         this.sun.castShadow = this.quality.shadows > 0;
         this.sun.shadow.mapSize.set(this.quality.shadows || 512, this.quality.shadows || 512);
-        const extent = 85;
+        const extent = SHADOW_EXTENT;
         Object.assign(this.sun.shadow.camera, { left: -extent, right: extent, top: extent, bottom: -extent, near: 1, far: 420 });
-        this.sun.shadow.bias = -0.0004;
-        this.sun.shadow.normalBias = 0.05;
+        this.sun.shadow.bias = -0.0003;
+        this.sun.shadow.normalBias = 0.04;
+        this.sun.shadow.radius = 2.2;          // softer edges
         this.scene.add(this.sun, this.sun.target);
         this.fill = new THREE.DirectionalLight(0x9bc8ea, 0.62);
         this.fill.position.set(120, 58, -130);
@@ -358,6 +366,8 @@ export class RoadRaceGame {
             this.physics.addVehicle(vehicle);
             const visual = createVehicleVisual(this.vehicleAssets.get(vehicleInfo.id), { paint: isPlayer ? this.paint : rival.paint, spec, castShadow: this.quality.shadows > 0 });
             this.scene.add(visual.root);
+            const ground = contactShadow(vehicleInfo.type === 'BIKE' ? 0.75 : vehicleInfo.dims.width, vehicleInfo.dims.length || 2.4);
+            visual.root.add(ground);
             const tracker = new ProgressTracker(this.model, vehicle);
             const driver = isPlayer ? null : new AIDriver({ track: this.model, vehicle, tracker, personality: rival.profile, pace, seed: slot + 3 });
             const nitroFx = new NitroEffect(this.scene, visual, { exhausts: vehicleInfo.dims.exhausts, isPlayer, glow: this.glow });
@@ -367,7 +377,7 @@ export class RoadRaceGame {
                 pos: new THREE.Vector3(), quat: new THREE.Quaternion(),
                 smokeTimer: 0, wasWrecked: false, crew: isPlayer ? 'YOU' : rival.crew,
                 police: Boolean(rival?.police), eliminated: false, eliminatedAt: null, beacon: null,
-                paint: isPlayer ? this.paint : rival.paint, shattered: false, burning: 0
+                paint: isPlayer ? this.paint : rival.paint, shattered: false, burning: 0, ground
             };
             if (racer.police) racer.beacon = this.addBeacon(visual, vehicleInfo);
             if (info.city) racer.lights = this.addLights(visual, vehicleInfo, isPlayer);
@@ -1032,6 +1042,7 @@ export class RoadRaceGame {
             updateVehicleVisual(visual, vehicle, dt || 0.016);
             // Ghost cars (just respawned) blink so they read as intangible.
             this.updateWreck(racer, dt);
+            racer.ground.visible = !vehicle.airborne && vehicle.mode === 'ok';
             visual.root.visible = !racer.eliminated && !racer.shattered && (vehicle.ghostTimer <= 0 || Math.floor(time * 12) % 2 === 0);
             if (racer.lights) {
                 const glow = vehicle.braking ? 14 : 3;
@@ -1053,8 +1064,17 @@ export class RoadRaceGame {
         const p = this.player;
         const sun = this.sun;
         const sunOffset = this.look?.sunOffset || DAY_SUN_OFFSET;
-        sun.position.set(p.pos.x + sunOffset.x, p.pos.y + sunOffset.y, p.pos.z + sunOffset.z);
-        sun.target.position.copy(p.pos);
+        // The shadow follows the player in whole shadow-map texels, measured across the light.
+        // Following smoothly makes every shadow edge crawl as the car moves.
+        const texel = (SHADOW_EXTENT * 2) / (this.quality.shadows || 512);
+        const toSun = _sunDir.copy(sunOffset).normalize();
+        const across = _sunRight.crossVectors(_worldUp, toSun).normalize();
+        const along = _sunUp.crossVectors(toSun, across);
+        const r = Math.round(p.pos.dot(across) / texel) * texel;
+        const u = Math.round(p.pos.dot(along) / texel) * texel;
+        const anchor = _sunAnchor.copy(across).multiplyScalar(r).addScaledVector(along, u).addScaledVector(toSun, p.pos.dot(toSun));
+        sun.position.copy(anchor).add(sunOffset);
+        sun.target.position.copy(anchor);
         const speedRatio = Math.min(1, p.vehicle.speedAbs / (p.spec.engine.topSpeed * 1.2));
         const nitro = p.nitroFx.intensity;
         this.cameraRig.update(dt || 0.016, p.vehicle, p.pos, { nitro, speedRatio });

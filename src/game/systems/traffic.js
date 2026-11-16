@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GROUP, groups } from '../physics/trackWorld.js';
 import { quaternionFromForward } from '../physics/vehicle.js';
+import { contactShadow } from '../effects/contactShadow.js';
 
 // Road traffic: the obstacles of a race are other vehicles.
 //
@@ -52,6 +53,8 @@ function buildVehicle(models, kind, paint, castShadow) {
             owned.push(child.material);
         }
     });
+    const size = KINDS[kind];
+    group.add(contactShadow(size.width, size.length));
     return { group, wheels, lamps, owned };
 }
 

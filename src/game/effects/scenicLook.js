@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { loadProgress } from '../loadProgress.js';
 import { carve, fillSea, makeCrags, paintLanes, raiseMountains, scatterRocks } from './roadDressing.js';
 import { TREE_SPECIES, loadBackdrop, loadImage, loadModel, loadSky, plantTrees, surface, tiled, treeParts } from './cityLook.js';
@@ -73,9 +77,9 @@ const COUNTRY = {
 
 const HIDDEN = /_(Scenery_Canopy|Scenery_Canopy_Light|Scenery_Trunk|Scenery_SnowTips|Ridge_Silhouette)$/;
 // Rock props exported as plain shapes: boulders, cliffs, sea stacks. They take the landscape's rock.
-const ROCKY = /_(Scenery_Boulder|Crater_Rock|Ice_Ridge|SeaStack_Coral|Falls_Cliff|Beacon_Stone)$/;
+const ROCKY = /_(Scenery_Boulder|Crater_Rock|SeaStack_Coral|Falls_Cliff|Beacon_Stone)$/;
 // Things that stand on the landscape and must move with it when it is carved.
-const GROUNDED = /_(Scenery_Lava|Falls_Water|Lighthouse_Paint|Lighthouse_Lamp|Scenery_Steel|Landmark_Steel|Landmark_Accent)$/;
+const GROUNDED = /_(Ice_Ridge|Scenery_Lava|Falls_Water|Lighthouse_Paint|Lighthouse_Lamp|Scenery_Steel|Landmark_Steel|Landmark_Accent)$/;
 // The light and shadow patches are cells of the same landscape, coloured differently.
 const TERRAIN = /_Terrain_(Base|Rock|High|LightPatches|ShadowPatches)$/;
 
@@ -192,7 +196,9 @@ export async function createScenicLook({ renderer, scene, camera, trackScene, me
     const rail = new THREE.MeshStandardMaterial({ color: 0xb9bdc1, metalness: 0.85, roughness: 0.42 });
     const post = new THREE.MeshStandardMaterial({ color: 0x6f7377, metalness: 0.7, roughness: 0.55 });
     const paint = new THREE.MeshStandardMaterial({ color: 0xe6e4da, roughness: 0.6 });
-    const owned = [terrain, rail, post, paint, asphalt];
+    const lava = new THREE.MeshStandardMaterial({ color: 0x220600, roughness: 0.6, emissive: 0xff4a0c, emissiveIntensity: 3.2 });
+    const ice = new THREE.MeshStandardMaterial({ color: 0xbfe4f2, roughness: 0.12, metalness: 0.15, transparent: true, opacity: 0.86, envMapIntensity: 1.4 });
+    const owned = [terrain, rail, post, paint, asphalt, lava, ice];
 
     const country = COUNTRY[meta.theme] || {};
     const crags = makeCrags(meta, country.crags);
@@ -204,6 +210,9 @@ export async function createScenicLook({ renderer, scene, camera, trackScene, me
         if (TERRAIN.test(name)) { smoothTerrain(object, crags); material = terrain; object.castShadow = false; }
         else if (ROCKY.test(name)) { reshape(object, crags); material = terrain; }
         else if (GROUNDED.test(name)) reshape(object, crags);
+        // Molten rock glows; glacier ice is glassy and pale.
+        if (/_Scenery_Lava$/.test(name)) material = lava;
+        else if (/_Ice_Ridge$/.test(name)) material = ice;
         else if (/_Track_Asphalt$/.test(name)) { material = asphalt; object.castShadow = false; }
         else if (/_Barrier_Guardrail$/.test(name)) material = rail;
         else if (/_Barrier_Support$/.test(name)) material = post;
@@ -266,12 +275,25 @@ export async function createScenicLook({ renderer, scene, camera, trackScene, me
         tint: (tree, index) => palette[Math.abs(index * 13 + Math.floor(tree.position[2])) % palette.length]
     });
 
+    // A little bloom: the sun on snow and water, lava, and bright sky bleed gently into the lens.
+    let composer = null;
+    if (quality.bloom !== false && quality.shadows > 0) {
+        const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+        const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: quality.antialias ? 4 : 0 });
+        composer = new EffectComposer(renderer, target);
+        composer.addPass(new RenderPass(scene, camera));
+        composer.addPass(new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.2, 0.55, 0.9));
+        composer.addPass(new OutputPass());
+    }
+
     return {
         sunOffset: sunDirection(environment).multiplyScalar(230),
         update() { trees.update(camera); },
-        render() { renderer.render(scene, camera); },
-        resize() {},
+        render() { if (composer) composer.render(); else renderer.render(scene, camera); },
+        resize(width, height) { composer?.setSize(width, height); },
+        setPixelRatio(ratio) { composer?.setPixelRatio(ratio); },
         dispose() {
+            composer?.dispose();
             trees.dispose();
             for (const item of dressing) item.dispose();
             envMap.dispose();
