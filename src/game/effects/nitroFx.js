@@ -196,8 +196,11 @@ export class NitroEffect {
         });
         if (isPlayer) {
             this.light = new THREE.PointLight(0x3a9bff, 0, 16, 1.8);
-            this.light.position.set(0, 0.7, -2.4);
-            visual.lean.add(this.light);
+            // In the scene itself, following the car: a light inside the model would vanish
+            // whenever the model is hidden (it blinks after a respawn), and every change in the
+            // number of lights makes the renderer rebuild all its materials.
+            this.anchor = visual.lean;
+            scene.add(this.light);
         }
         this.world = new THREE.Vector3();
         this.accumulator = 0;
@@ -222,7 +225,10 @@ export class NitroEffect {
             if (active) trail.push(this.world.x, this.world.y, this.world.z);
         });
         this.trails.forEach((trail) => trail.update(dt, camera.position, active));
-        if (this.light) this.light.intensity = 5.5 * this.intensity * (0.85 + 0.15 * Math.sin(time * 70));
+        if (this.light) {
+            this.light.intensity = 5.5 * this.intensity * (0.85 + 0.15 * Math.sin(time * 70));
+            this.light.position.set(0, 0.7, -2.4).applyMatrix4(this.anchor.matrixWorld);
+        }
 
         // Sparks spat out of the nozzles.
         if (active && particles) {

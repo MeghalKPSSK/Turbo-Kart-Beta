@@ -29,6 +29,7 @@ const modelBase = `${import.meta.env.BASE_URL || '/'}models/blender/`;
 const modelCache = new Map();
 // Longest frame the loop will simulate in one go (slower machines slow down below 10 fps).
 const MAX_FRAME_TIME = 0.1;
+const HEADLIGHT = 95;        // candela of the player's headlight beam
 const MAX_STEPS_PER_FRAME = Math.ceil(MAX_FRAME_TIME / FIXED_DT);
 
 function loadAsset(filename) {
@@ -399,13 +400,20 @@ export class RoadRaceGame {
             tail = bike ? [lamp(0xff2418, 3, 0, 0.98, rear, 0.18)] : [lamp(0xff2418, 3, 0, 0.72, rear, 0.9)];
         }
         let beam = null;
+        let mount = null;
         if (isPlayer) {
-            beam = new THREE.SpotLight(0xfff0d8, 95, 90, 0.5, 0.9, 1.5);
+            // The headlight lives in the scene, not inside the car model, and is dimmed rather
+            // than hidden. Hiding a light (or the model it sits in, which blinks after a respawn)
+            // changes how many lights the scene has, and the renderer then rebuilds every
+            // material: the game froze for a moment on each wreck and recovery.
+            beam = new THREE.SpotLight(0xfff0d8, HEADLIGHT, 90, 0.5, 0.9, 1.5);
             beam.position.set(0, height + 0.15, front);
             beam.target.position.set(0, -0.4, front + 30);
-            visual.lean.add(beam, beam.target);
+            mount = new THREE.Group();
+            mount.add(beam, beam.target);
+            this.scene.add(mount);
         }
-        return { tail, beam };
+        return { tail, beam, mount };
     }
 
     // Red and blue roof lights for a pursuit unit; updateVisuals flashes them.
@@ -1028,7 +1036,11 @@ export class RoadRaceGame {
             if (racer.lights) {
                 const glow = vehicle.braking ? 14 : 3;
                 for (const light of racer.lights.tail) light.material.emissiveIntensity = glow;
-                if (racer.lights.beam) racer.lights.beam.visible = vehicle.mode === 'ok';
+                if (racer.lights.beam) {
+                    racer.lights.mount.position.copy(racer.pos);
+                    racer.lights.mount.quaternion.copy(racer.quat);
+                    racer.lights.beam.intensity = vehicle.mode === 'ok' && !racer.eliminated ? HEADLIGHT : 0;
+                }
             }
             if (racer.beacon) {
                 const phase = Math.floor(time * 6) % 2;
