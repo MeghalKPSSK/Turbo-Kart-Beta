@@ -13,12 +13,12 @@ const MODELS = resolve(dirname(fileURLToPath(import.meta.url)), '../../public/mo
 // Per theme: how high trees grow (metres above the lowest road point), how many, and how
 // far from the road the forest reaches.
 const FOREST = {
-    mountain_adventure: { treeline: 46, count: 1100, reach: 210 },
+    mountain_adventure: { treeline: 46, count: 850, reach: 210 },
     canyon: { treeline: 44, count: 420, reach: 175 },
     island: { treeline: 48, count: 420, reach: 180 },
     volcano: { treeline: 28, count: 0, reach: 120 },
     ice: { treeline: 42, count: 260, reach: 170 },
-    jungle: { treeline: 58, count: 950, reach: 200 },
+    jungle: { treeline: 58, count: 760, reach: 200 },
     industrial: { treeline: 36, count: 100, reach: 140 },
     coastal_sunset: { treeline: 55, count: 460, reach: 190 },
     default: { treeline: 60, count: 420, reach: 190 }

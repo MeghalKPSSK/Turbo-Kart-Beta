@@ -185,7 +185,9 @@ export class PhysicsWorld {
         this.ray = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
         this.hit = { toi: 0, nx: 0, ny: 1, nz: 0, collider: null };
 
-        const worldGroups = groups(GROUP.WORLD, GROUP.VEHICLE | GROUP.GHOST);
+        // Obstacles are included so that traffic knocked loose lands on the road instead of
+        // falling through it.
+        const worldGroups = groups(GROUP.WORLD, GROUP.VEHICLE | GROUP.GHOST | GROUP.OBSTACLE);
         const ground = buildGroundGeometry(track, roadGeometry);
         this.groundCollider = this.addStatic(RAPIER.ColliderDesc.trimesh(ground.positions, ground.indices)
             .setFriction(1).setRestitution(0).setCollisionGroups(worldGroups), { type: 'ground' });

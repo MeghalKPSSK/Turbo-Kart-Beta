@@ -258,6 +258,43 @@ export default function App() {
         setScreen(lobby);
     };
 
+    // One step back from wherever the player is. Escape and the browser's Back button both
+    // do this, so neither ever drops the player out of the game from a menu.
+    const goBack = () => {
+        if (screen === 'race') {
+            if (racePhase === 'running') pauseRace();
+            else if (racePhase === 'paused' || racePhase === 'error') exitRace(lobby);
+            return;
+        }
+        if (screen === 'result') { continueFromResult(); return; }
+        if (screen === 'garage') { setScreen(mode === 'career' ? 'career' : mode === 'cup' ? 'cups' : 'home'); return; }
+        if (screen === 'courses') { setScreen('garage'); return; }
+        if (screen !== 'home') setScreen('home');
+    };
+    const goBackRef = useRef(goBack);
+    goBackRef.current = goBack;
+
+    // Escape steps back through the menus (in a race it is the pause key, handled with the controls).
+    useEffect(() => {
+        if (screen === 'race' || screen === 'home') return undefined;
+        const handleKey = (event) => {
+            if (event.key !== 'Escape' || event.defaultPrevented || document.querySelector('[data-listening="true"]')) return;
+            goBackRef.current();
+        };
+        window.addEventListener('keydown', handleKey);
+        return () => window.removeEventListener('keydown', handleKey);
+    }, [screen]);
+
+    // The browser's Back button: away from the home screen there is always one history entry
+    // of ours to consume, so Back means "back one screen" until the player is home again.
+    useEffect(() => {
+        if (screen === 'home') return undefined;
+        if (!window.history.state?.trl) window.history.pushState({ trl: true }, '');
+        const handlePop = () => { goBackRef.current(); };
+        window.addEventListener('popstate', handlePop);
+        return () => window.removeEventListener('popstate', handlePop);
+    }, [screen, racePhase]);
+
     const selectVehicle = (item) => {
         setVehicleId(item.id);
         setPaint(item.defaultPaint);

@@ -205,6 +205,14 @@ async function buildMaterials(anisotropy) {
         for (const t of Object.values(textures)) t.anisotropy = anisotropy;
         return new THREE.MeshStandardMaterial({ ...textures, roughness: 1, metalness: 0, emissive: 0xffffff, emissiveIntensity: 2.0, ...extra });
     };
+    // The ground slabs under the city blocks overlap the carriageway where streets meet. They
+    // take the road's own wet tarmac, and are drawn just behind it, so the road, its markings
+    // and the kerbs always win and no bare patch shows across the lanes.
+    const slab = asphalt.clone();
+    slab.polygonOffset = true;
+    slab.polygonOffsetFactor = 3;
+    slab.polygonOffsetUnits = 12;
+    block.dispose();
     const marking = plain(0xd9d8cf, 0.6);
     marking.polygonOffset = true;
     marking.polygonOffsetFactor = -2;
@@ -219,7 +227,7 @@ async function buildMaterials(anisotropy) {
         Road_Marking: marking,
         Kerb_Stone: kerb,
         Ground_Pavement: pavement,
-        Ground_Block: block,
+        Ground_Block: slab,
         Ground_Grass: grass,
         Barrier_Concrete: barrier,
         Roof: roof,
@@ -239,7 +247,7 @@ async function buildMaterials(anisotropy) {
 // Instanced trees in a grid of chunks. Each chunk has a detailed and a light version of its
 // trees; only chunks near the camera draw the detailed one.
 export const TREE_SPECIES = ['tree_island', 'tree_round', 'tree_tall'];
-const CHUNK = 90;
+const CHUNK = 130;
 const NEAR = 48;
 const FAR = 380;
 const MID = 250;      // with a horizon set, real tree models stop here and crowns take over
@@ -481,6 +489,7 @@ export async function createCityLook({ renderer, scene, camera, trackScene, meta
         update() { trees.update(camera); },
         render() { if (composer) composer.render(); else renderer.render(scene, camera); },
         resize(width, height) { composer?.setSize(width, height); },
+        setPixelRatio(ratio) { composer?.setPixelRatio(ratio); },
         dispose() {
             trees.dispose();
             signs.dispose();

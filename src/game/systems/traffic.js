@@ -216,6 +216,7 @@ export class TrafficSystem {
         entry.mode = 'knocked';
         entry.timer = 4.5;
         entry.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+        entry.body.enableCcd(true);          // a tumbling van must not tunnel through the road
         entry.body.setLinvel({ x: velocity.x * 0.75, y: 3.5, z: velocity.z * 0.75 }, true);
         entry.body.setAngvel({ x: (this.random() - 0.5) * 3, y: (this.random() - 0.5) * 7, z: (this.random() - 0.5) * 3 }, true);
     }
@@ -223,6 +224,7 @@ export class TrafficSystem {
     rejoin(entry, playerS) {
         const RAPIER = this.physics.RAPIER;
         entry.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
+        entry.body.enableCcd(false);
         entry.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
         entry.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
         entry.mode = 'driving';

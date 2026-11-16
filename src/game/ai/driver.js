@@ -172,6 +172,15 @@ export class AIDriver {
         const profileSpeed = sampleAt(track, this.profile.speed, s + clamp(speed * 0.12, 2, 12));
         let target_v = profileSpeed * this.pace * rubber;
         if (ramTarget) target_v = Math.max(target_v, ramTarget.vehicle.speed + 9);
+        // Do not drive into the back of whoever is directly ahead: arrive no faster than the
+        // brakes can match their speed in the gap that is left. (An attack on the player is
+        // the one deliberate exception.)
+        const lead = this.lead;
+        if (lead && !ramTarget && Math.abs(lead.racer.tracker.lane - t.lane) < 2.3) {
+            const room = Math.max(0, lead.gap - (v.spec.dims?.length || 4.5) - 1.5);
+            const safe = Math.max(0, lead.racer.vehicle.speed) + Math.sqrt(2 * (v.spec.engine.brakeForce / v.spec.mass) * 0.62 * room);
+            target_v = Math.min(target_v, Math.max(3, safe));
+        }
         if (dodge) {
             // Never arrive at an obstacle faster than the car can still steer around it.
             const shift = Math.max(0, dodge.shift - 0.8);
@@ -213,8 +222,10 @@ export class AIDriver {
             if (along > 1 && along < bestGap && Math.abs(other.tracker.lane - this.tracker.lane) < laneWidth) {
                 best = other.tracker;
                 bestGap = along;
+                this.lead = { racer: other, gap: along };
             }
         }
+        if (!best) this.lead = null;
         return best;
     }
 

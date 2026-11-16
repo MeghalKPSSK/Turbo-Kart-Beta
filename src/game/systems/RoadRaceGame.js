@@ -289,6 +289,7 @@ export class RoadRaceGame {
         this.renderer.toneMappingExposure = 0.98;
         this.renderer.shadowMap.enabled = this.quality.shadows > 0;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.shadowMap.autoUpdate = false;       // see draw()
         this.container.appendChild(this.renderer.domElement);
 
         this.scene = new THREE.Scene();
@@ -528,16 +529,52 @@ export class RoadRaceGame {
     // ------------------------------------------------------------------------------ main loop
     frame(now) {
         if (this.disposed) return;
-        const delta = Math.min(MAX_FRAME_TIME, Math.max(0, (now - this.lastFrame) / 1000));
+        const elapsed = Math.max(0, (now - this.lastFrame) / 1000);
+        const delta = Math.min(MAX_FRAME_TIME, elapsed);
         this.lastFrame = now;
         this.tick(delta);
         this.draw();
+        this.adaptResolution(elapsed);
         this.animationFrame = requestAnimationFrame(this.frame);
     }
 
     draw() {
+        // Shadows are redrawn every other frame: at speed the difference is invisible, and the
+        // shadow pass is about a third of the cost of a frame.
+        this.frameCount = (this.frameCount || 0) + 1;
+        this.renderer.shadowMap.needsUpdate = this.frameCount % 2 === 0;
         if (this.look) this.look.render();
         else this.renderer.render(this.scene, this.camera);
+    }
+
+    // Keeps the race smooth on any machine: if frames are taking too long the picture is drawn
+    // at a lower resolution, and sharpened again when there is headroom.
+    adaptResolution(elapsed) {
+        if (this.paused || elapsed <= 0 || elapsed > 0.5 || (typeof document !== 'undefined' && document.hidden)) return;
+        const perf = this.perf || (this.perf = { time: 0, frames: 0, hold: 0, good: 0 });
+        perf.time += elapsed;
+        perf.frames += 1;
+        perf.hold = Math.max(0, perf.hold - elapsed);
+        if (perf.time < 1.5) return;
+        const fps = perf.frames / perf.time;
+        perf.time = 0;
+        perf.frames = 0;
+        const highest = Math.min(window.devicePixelRatio || 1, this.quality.pixelRatio);
+        const lowest = Math.min(highest, 0.75);
+        const current = this.renderer.getPixelRatio();
+        let next = current;
+        if (fps < 47) {
+            next = Math.max(lowest, current - (fps < 34 ? 0.3 : 0.15));
+            perf.hold = 20;              // do not creep straight back up
+            perf.good = 0;
+        } else if (fps > 57 && perf.hold === 0) {
+            perf.good += 1;
+            if (perf.good >= 4) { next = Math.min(highest, current + 0.1); perf.good = 0; perf.hold = 6; }
+        } else perf.good = 0;
+        if (Math.abs(next - current) < 0.01) return;
+        this.renderer.setPixelRatio(next);
+        this.look?.setPixelRatio?.(next);
+        this.resize();
     }
 
     tick(delta) {

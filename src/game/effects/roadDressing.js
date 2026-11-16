@@ -348,7 +348,7 @@ export function scatterRocks(scene, trackScene, meta, material, { count = 260, r
     geometry.computeVertexNormals();          // unshared corners: every face is a flat facet of broken rock
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = 'Boulders';
-    mesh.castShadow = true;
+    mesh.castShadow = false;
     mesh.receiveShadow = true;
     mesh.frustumCulled = false;
     scene.add(mesh);

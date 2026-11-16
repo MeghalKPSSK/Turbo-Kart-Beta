@@ -107,15 +107,15 @@ function terrainMaterial({ meadow, rock, snow, snowline, tint }) {
                 w /= (w.x + w.y + w.z);
                 float patchy = texture2D(tMeadow, vTerrainPos.xz * 0.0031).g;
                 float veins = texture2D(tRock, vTerrainPos.xz * 0.0043).r;
-                vec3 meadow = threeSided(tMeadow, vTerrainPos, w, 0.085) * mix(0.75, 1.25, patchy) * vec3(0.6, 1.0, 0.44);
+                vec3 meadow = texture2D(tMeadow, vTerrainPos.xz * 0.085).rgb * mix(0.75, 1.25, patchy) * vec3(0.6, 1.0, 0.44);
                 vec3 rock = threeSided(tRock, vTerrainPos, w, 0.045) * mix(0.78, 1.18, veins);
-                vec3 snow = threeSided(tSnow, vTerrainPos, w, 0.06) * 1.08;
+                vec3 snow = texture2D(tSnow, vTerrainPos.xz * 0.06).rgb * 1.08;     // grass and snow only lie on flat ground: one projection is enough
                 float rockiness = 1.0 - smoothstep(0.6, 0.86, tn.y + (patchy - 0.5) * 0.14);
                 // Crags and scree: bands of bare rock break through the grass wherever the
                 // ground tilts at all, so a hillside is never one flat colour.
-                float crag = texture2D(tRock, vTerrainPos.xz * 0.0017 + 0.31).g + texture2D(tMeadow, vTerrainPos.zx * 0.0061).r * 0.5;
+                float crag = texture2D(tRock, vTerrainPos.xz * 0.0017 + 0.31).g + patchy * 0.5;
                 rockiness = max(rockiness, smoothstep(0.62, 0.8, crag + (1.0 - tn.y) * 1.7) * 0.9);
-                rock *= mix(0.62, 1.0, texture2D(tRock, vTerrainPos.xz * 0.011).r);
+                rock *= mix(0.62, 1.0, veins);
                 float snowiness = smoothstep(uSnowline - 22.0, uSnowline + 30.0, vTerrainPos.y + (patchy - 0.5) * 46.0 + (veins - 0.5) * 30.0) * smoothstep(0.3, 0.68, tn.y);
                 diffuseColor.rgb = mix(mix(meadow, rock, rockiness), snow, snowiness) * uTerrainTint;`);
     };
